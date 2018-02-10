@@ -6,22 +6,23 @@
 
 #include <vector>
 
-#include "llvmir2hll/ir/bit_or_op_expr.h"
-#include "llvmir2hll/ir/call_expr.h"
-#include "llvmir2hll/ir/const_int.h"
-#include "llvmir2hll/ir/const_null_pointer.h"
-#include "llvmir2hll/ir/const_symbol.h"
-#include "llvmir2hll/ir/function.h"
-#include "llvmir2hll/ir/int_type.h"
-#include "llvmir2hll/ir/module.h"
-#include "llvmir2hll/ir/variable.h"
-#include "llvmir2hll/semantics/semantics.h"
-#include "llvmir2hll/support/const_symbol_converter.h"
-#include "llvmir2hll/support/debug.h"
-#include "llvmir2hll/support/maybe.h"
-#include "llvmir2hll/support/types.h"
-#include "llvmir2hll/utils/ir.h"
+#include "retdec/llvmir2hll/ir/bit_or_op_expr.h"
+#include "retdec/llvmir2hll/ir/call_expr.h"
+#include "retdec/llvmir2hll/ir/const_int.h"
+#include "retdec/llvmir2hll/ir/const_null_pointer.h"
+#include "retdec/llvmir2hll/ir/const_symbol.h"
+#include "retdec/llvmir2hll/ir/function.h"
+#include "retdec/llvmir2hll/ir/int_type.h"
+#include "retdec/llvmir2hll/ir/module.h"
+#include "retdec/llvmir2hll/ir/variable.h"
+#include "retdec/llvmir2hll/semantics/semantics.h"
+#include "retdec/llvmir2hll/support/const_symbol_converter.h"
+#include "retdec/llvmir2hll/support/debug.h"
+#include "retdec/llvmir2hll/support/maybe.h"
+#include "retdec/llvmir2hll/support/types.h"
+#include "retdec/llvmir2hll/utils/ir.h"
 
+namespace retdec {
 namespace llvmir2hll {
 
 namespace {
@@ -43,7 +44,7 @@ ShPtr<ConstInt> getArgAsConstInt(ShPtr<Expression> arg) {
 	//
 	//     signal(SIGSTOP, SIG_IGN);
 	//
-	// TODO Is this valid under all circumstances? See #726.
+	// TODO Is this valid under all circumstances?
 	ShPtr<Expression> argWithoutCasts(skipCasts(arg));
 
 	// Treat the null pointer as zero (0). In this way, we can convert, e.g.,
@@ -254,3 +255,4 @@ void ConstSymbolConverter::visit(ShPtr<CallExpr> expr) {
 }
 
 } // namespace llvmir2hll
+} // namespace retdec

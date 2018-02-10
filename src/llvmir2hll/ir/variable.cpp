@@ -4,11 +4,12 @@
 * @copyright (c) 2017 Avast Software, licensed under the MIT license
 */
 
-#include "llvmir2hll/ir/type.h"
-#include "llvmir2hll/ir/variable.h"
-#include "llvmir2hll/support/debug.h"
-#include "llvmir2hll/support/visitor.h"
+#include "retdec/llvmir2hll/ir/type.h"
+#include "retdec/llvmir2hll/ir/variable.h"
+#include "retdec/llvmir2hll/support/debug.h"
+#include "retdec/llvmir2hll/support/visitor.h"
 
+namespace retdec {
 namespace llvmir2hll {
 
 /**
@@ -88,7 +89,7 @@ ShPtr<Type> Variable::getType() const {
 *  - Internal variables correspond to variables that either have 'internal
 *    linkage' in LLVM IR or are ordinary local variables.
 *  - External variables correspond to variables that either have 'external
-*    linkage' or are used in a volatile load/store operation (see #1146).
+*    linkage' or are used in a volatile load/store operation.
 *
 * By default, variables are created as internal variables. To make them
 * external, call @c markAsExternal().
@@ -183,3 +184,4 @@ void Variable::accept(Visitor *v) {
 }
 
 } // namespace llvmir2hll
+} // namespace retdec

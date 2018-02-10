@@ -12,17 +12,18 @@
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Operator.h>
 
-#include "llvm-support/utils.h"
-#include "tl-cpputils/string.h"
-#include "bin2llvmir/analyses/symbolic_tree.h"
-#include "bin2llvmir/providers/config.h"
-#include "bin2llvmir/utils/defs.h"
+#include "retdec/llvm-support/utils.h"
+#include "retdec/utils/string.h"
+#include "retdec/bin2llvmir/analyses/symbolic_tree.h"
+#include "retdec/bin2llvmir/providers/config.h"
+#include "retdec/bin2llvmir/utils/defs.h"
 
-using namespace llvm_support;
+using namespace retdec::llvm_support;
 using namespace llvm;
 
 #define debug_enabled false
 
+namespace retdec {
 namespace bin2llvmir {
 
 SymbolicTree::SymbolicTree(
@@ -94,7 +95,7 @@ SymbolicTree& SymbolicTree::operator=(SymbolicTree&& other)
 		value = other.value;
 		user = other.user;
 		// Do NOT use `ops = std::move(other.ops);` to allow use like
-		// `*this = ops[0];`. Use std::swap() instead. See #1581.
+		// `*this = ops[0];`. Use std::swap() instead.
 		std::swap(ops, other.ops);
 		_failed = other._failed;
 	}
@@ -589,10 +590,10 @@ std::string SymbolicTree::print(unsigned indent) const
 {
 	std::stringstream out;
 	if (Function* F = dyn_cast<Function>(value))
-		out << tl_cpputils::getIndentation(indent) << ">| "
+		out << retdec::utils::getIndentation(indent) << ">| "
 			<< F->getName().str() << std::endl;
 	else
-		out << tl_cpputils::getIndentation(indent) << ">| "
+		out << retdec::utils::getIndentation(indent) << ">| "
 			<< llvmObjToString(value) << std::endl;
 
 	++indent;
@@ -659,3 +660,4 @@ void SymbolicTree::_getPostOrder(std::vector<SymbolicTree*>& res) const
 }
 
 } // namespace bin2llvmir
+} // namespace retdec

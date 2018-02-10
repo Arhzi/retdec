@@ -4,10 +4,11 @@
  * @copyright (c) 2017 Avast Software, licensed under the MIT license
  */
 
-#include "bin2llvmir/optimizations/idioms/idioms_analysis.h"
+#include "retdec/bin2llvmir/optimizations/idioms/idioms_analysis.h"
 
 using namespace llvm;
 
+namespace retdec {
 namespace bin2llvmir {
 
 /*
@@ -260,7 +261,7 @@ bool IdiomsAnalysis::doAnalysis(Function & f, Pass * p) {
 										"IdiomsLLVM::exchangeCompareEq");
 
 	#if 0
-			/* We do not recognize this well, see #546 */
+			/* We do not recognize this well */
 			change_made |= analyse(bb, &IdiomsLLVM::exchangeCompareNeq,
 										"IdiomsLLVM::exchangeCompareNeq");
 	#endif
@@ -297,3 +298,4 @@ bool IdiomsAnalysis::analyse(llvm::Function & f, llvm::Pass * p, int (IdiomsAnal
 }
 
 } // namespace bin2llvmir
+} // namespace retdec

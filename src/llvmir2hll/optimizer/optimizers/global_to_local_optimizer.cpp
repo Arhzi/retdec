@@ -4,28 +4,29 @@
 * @copyright (c) 2017 Avast Software, licensed under the MIT license
 */
 
-#include "llvmir2hll/analysis/value_analysis.h"
-#include "llvmir2hll/analysis/var_uses_visitor.h"
-#include "llvmir2hll/graphs/cfg/cfg_traversals/unneeded_global_vars_cfg_traversal.h"
-#include "llvmir2hll/graphs/cfg/cfg_traversals/var_use_cfg_traversal.h"
-#include "llvmir2hll/graphs/cg/cg_builder.h"
-#include "llvmir2hll/ir/assign_stmt.h"
-#include "llvmir2hll/ir/function.h"
-#include "llvmir2hll/ir/global_var_def.h"
-#include "llvmir2hll/ir/module.h"
-#include "llvmir2hll/ir/statement.h"
-#include "llvmir2hll/ir/var_def_stmt.h"
-#include "llvmir2hll/ir/variable.h"
-#include "llvmir2hll/obtainer/call_info_obtainer.h"
-#include "llvmir2hll/optimizer/optimizers/global_to_local_optimizer.h"
-#include "llvmir2hll/support/debug.h"
-#include "llvmir2hll/support/variable_replacer.h"
-#include "llvmir2hll/utils/ir.h"
-#include "tl-cpputils/container.h"
+#include "retdec/llvmir2hll/analysis/value_analysis.h"
+#include "retdec/llvmir2hll/analysis/var_uses_visitor.h"
+#include "retdec/llvmir2hll/graphs/cfg/cfg_traversals/unneeded_global_vars_cfg_traversal.h"
+#include "retdec/llvmir2hll/graphs/cfg/cfg_traversals/var_use_cfg_traversal.h"
+#include "retdec/llvmir2hll/graphs/cg/cg_builder.h"
+#include "retdec/llvmir2hll/ir/assign_stmt.h"
+#include "retdec/llvmir2hll/ir/function.h"
+#include "retdec/llvmir2hll/ir/global_var_def.h"
+#include "retdec/llvmir2hll/ir/module.h"
+#include "retdec/llvmir2hll/ir/statement.h"
+#include "retdec/llvmir2hll/ir/var_def_stmt.h"
+#include "retdec/llvmir2hll/ir/variable.h"
+#include "retdec/llvmir2hll/obtainer/call_info_obtainer.h"
+#include "retdec/llvmir2hll/optimizer/optimizers/global_to_local_optimizer.h"
+#include "retdec/llvmir2hll/support/debug.h"
+#include "retdec/llvmir2hll/support/variable_replacer.h"
+#include "retdec/llvmir2hll/utils/ir.h"
+#include "retdec/utils/container.h"
 
-using tl_cpputils::addToSet;
-using tl_cpputils::hasItem;
+using retdec::utils::addToSet;
+using retdec::utils::hasItem;
 
+namespace retdec {
 namespace llvmir2hll {
 
 /**
@@ -551,7 +552,7 @@ bool GlobalToLocalOptimizer::globalVarMayBeRemovedAsUnused(ShPtr<Variable> var) 
 	// Note: Even though we do not optimize external global variables, we want
 	//       to remove them if they are not used anywhere in the module. If we
 	//       did not do that, all such external global variables would remain
-	//       in the source code. See #1166 for an example.
+	//       in the source code.
 
 	return true;
 }
@@ -592,3 +593,4 @@ bool GlobalToLocalOptimizer::globalVarMayBeConverted(ShPtr<Variable> var,
 }
 
 } // namespace llvmir2hll
+} // namespace retdec

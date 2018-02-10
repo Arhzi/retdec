@@ -4,12 +4,13 @@
 * @copyright (c) 2017 Avast Software, licensed under the MIT license
 */
 
-#include "bin2llvmir/optimizations/unreachable_funcs/unreachable_funcs.h"
+#include "retdec/bin2llvmir/optimizations/unreachable_funcs/unreachable_funcs.h"
 #include "bin2llvmir/utils/llvmir_tests.h"
 
 using namespace ::testing;
 using namespace llvm;
 
+namespace retdec {
 namespace bin2llvmir {
 namespace tests {
 
@@ -501,7 +502,7 @@ TEST_F(UnreachableFuncsTests, mainOnlyDeclaration)
 	parseInput(R"(
 		; When the main function is just a declaration (i.e. it has no body), behave
 		; like there is no main function. This is needed when decompiling shared
-		; libraries containing an import of main (see #1387).
+		; libraries containing an import of main.
 
 		; Can't be optimized (see above).
 		define void @func() {
@@ -659,3 +660,4 @@ TEST_F(UnreachableFuncsTests, onlyMain02)
 
 } // namespace tests
 } // namespace bin2llvmir
+} // namespace retdec

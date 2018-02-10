@@ -35,7 +35,6 @@
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/InitializePasses.h>
 #include <llvm/LinkAllIR.h>
-#include <llvm/LinkAllPasses.h>
 #include <llvm/MC/SubtargetFeature.h>
 #include <llvm/Support/Debug.h>
 #include <llvm/Support/FileSystem.h>
@@ -53,8 +52,8 @@
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/Utils/Cloning.h>
 
-#include "llvm-support/diagnostics.h"
-#include "tl-cpputils/string.h"
+#include "retdec/llvm-support/diagnostics.h"
+#include "retdec/utils/string.h"
 
 using namespace llvm;
 
@@ -201,16 +200,16 @@ class ModulePassPrinter : public ModulePass
 
 		bool runOnModule(Module &M) override
 		{
-			if (llvmPassesNormalized.count(tl_cpputils::toLower(PhaseName)))
+			if (llvmPassesNormalized.count(retdec::utils::toLower(PhaseName)))
 			{
-				if (!llvmPassesNormalized.count(tl_cpputils::toLower(LastPhase)))
+				if (!llvmPassesNormalized.count(retdec::utils::toLower(LastPhase)))
 				{
-					llvm_support::printPhase(LlvmAggregatePhaseName);
+					retdec::llvm_support::printPhase(LlvmAggregatePhaseName);
 				}
 			}
 			else
 			{
-				llvm_support::printPhase(PhaseName);
+				retdec::llvm_support::printPhase(PhaseName);
 			}
 
 			// LastPhase gets updated every time.
@@ -272,34 +271,15 @@ static inline void addPassWithoutVerification(
  */
 void initializeLlvmPasses()
 {
-	InitializeAllTargets();
-	InitializeAllTargetMCs();
-	InitializeAllAsmPrinters();
 	// Initialize passes
 	PassRegistry &Registry = *PassRegistry::getPassRegistry();
 	initializeCore(Registry);
 	initializeScalarOpts(Registry);
-	initializeObjCARCOpts(Registry);
-	initializeVectorization(Registry);
 	initializeIPO(Registry);
 	initializeAnalysis(Registry);
 	initializeTransformUtils(Registry);
 	initializeInstCombine(Registry);
-	initializeInstrumentation(Registry);
 	initializeTarget(Registry);
-	// For codegen passes, only passes that do IR to IR transformation are
-	// supported.
-	initializeCodeGenPreparePass(Registry);
-	initializeAtomicExpandPass(Registry);
-	initializeRewriteSymbolsPass(Registry);
-	initializeWinEHPreparePass(Registry);
-	initializeDwarfEHPreparePass(Registry);
-	initializeSafeStackPass(Registry);
-	initializeSjLjEHPreparePass(Registry);
-	initializePreISelIntrinsicLoweringLegacyPassPass(Registry);
-	initializeGlobalMergePass(Registry);
-	initializeInterleavedAccessPass(Registry);
-	initializeUnreachableBlockElimLegacyPassPass(Registry);
 }
 
 /**
@@ -396,9 +376,9 @@ int _main(int argc, char **argv)
 			llvmPasses.begin(),
 			llvmPasses.end(),
 			std::inserter(llvmPassesNormalized, llvmPassesNormalized.end()),
-			tl_cpputils::toLower);
+			retdec::utils::toLower);
 
-	llvm_support::printPhase("Initialization");
+	retdec::llvm_support::printPhase("Initialization");
 	initializeLlvmPasses();
 
 	cl::ParseCommandLineOptions(
@@ -485,7 +465,7 @@ int _main(int argc, char **argv)
 	Passes.run(*M);
 
 	// Declare success.
-	llvm_support::printPhase("Cleanup");
+	retdec::llvm_support::printPhase("Cleanup");
 	bcOut->keep();
 	llOut->keep();
 	return EXIT_SUCCESS;

@@ -11,19 +11,20 @@
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Module.h>
 
-#include "llvm-support/utils.h"
-#include "tl-cpputils/container.h"
-#include "bin2llvmir/analyses/reachable_funcs_analysis.h"
-#include "bin2llvmir/optimizations/unreachable_funcs/unreachable_funcs.h"
-#include "bin2llvmir/utils/instruction.h"
+#include "retdec/llvm-support/utils.h"
+#include "retdec/utils/container.h"
+#include "retdec/bin2llvmir/analyses/reachable_funcs_analysis.h"
+#include "retdec/bin2llvmir/optimizations/unreachable_funcs/unreachable_funcs.h"
+#include "retdec/bin2llvmir/utils/instruction.h"
 
 #define OPTIMIZATION_NAME "unreachable-funcs"
 #define DEBUG_TYPE OPTIMIZATION_NAME
 
-using namespace llvm_support;
-using namespace tl_cpputils;
+using namespace retdec::llvm_support;
+using namespace retdec::utils;
 using namespace llvm;
 
+namespace retdec {
 namespace bin2llvmir {
 
 namespace {
@@ -156,8 +157,7 @@ bool UnreachableFuncs::optimizationCanRun() const {
 	}
 
 	// The main function has to be a definition, not just a declaration. This
-	// is needed when decompiling shared libraries containing an import of main
-	// (see #1387).
+	// is needed when decompiling shared libraries containing an import of main.
 	if (mainFunc->isDeclaration()) {
 		return false;
 	}
@@ -249,3 +249,4 @@ void UnreachableFuncs::removeFuncsFromModule(
 }
 
 } // namespace bin2llvmir
+} // namespace retdec

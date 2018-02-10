@@ -6,34 +6,35 @@
 
 #include <cstddef>
 
-#include "llvmir2hll/analysis/def_use_analysis.h"
-#include "llvmir2hll/analysis/use_def_analysis.h"
-#include "llvmir2hll/analysis/value_analysis.h"
-#include "llvmir2hll/analysis/var_uses_visitor.h"
-#include "llvmir2hll/graphs/cfg/cfg.h"
-#include "llvmir2hll/graphs/cfg/cfg_traversals/no_var_def_cfg_traversal.h"
-#include "llvmir2hll/graphs/cfg/cfg_traversals/var_def_cfg_traversal.h"
-#include "llvmir2hll/graphs/cg/cg_builder.h"
-#include "llvmir2hll/ir/assign_stmt.h"
-#include "llvmir2hll/ir/call_expr.h"
-#include "llvmir2hll/ir/const_array.h"
-#include "llvmir2hll/ir/const_null_pointer.h"
-#include "llvmir2hll/ir/const_string.h"
-#include "llvmir2hll/ir/const_struct.h"
-#include "llvmir2hll/ir/deref_op_expr.h"
-#include "llvmir2hll/ir/function.h"
-#include "llvmir2hll/ir/module.h"
-#include "llvmir2hll/ir/statement.h"
-#include "llvmir2hll/ir/var_def_stmt.h"
-#include "llvmir2hll/ir/variable.h"
-#include "llvmir2hll/obtainer/call_info_obtainer.h"
-#include "llvmir2hll/optimizer/optimizers/copy_propagation_optimizer.h"
-#include "llvmir2hll/support/debug.h"
-#include "llvmir2hll/utils/ir.h"
-#include "tl-cpputils/container.h"
+#include "retdec/llvmir2hll/analysis/def_use_analysis.h"
+#include "retdec/llvmir2hll/analysis/use_def_analysis.h"
+#include "retdec/llvmir2hll/analysis/value_analysis.h"
+#include "retdec/llvmir2hll/analysis/var_uses_visitor.h"
+#include "retdec/llvmir2hll/graphs/cfg/cfg.h"
+#include "retdec/llvmir2hll/graphs/cfg/cfg_traversals/no_var_def_cfg_traversal.h"
+#include "retdec/llvmir2hll/graphs/cfg/cfg_traversals/var_def_cfg_traversal.h"
+#include "retdec/llvmir2hll/graphs/cg/cg_builder.h"
+#include "retdec/llvmir2hll/ir/assign_stmt.h"
+#include "retdec/llvmir2hll/ir/call_expr.h"
+#include "retdec/llvmir2hll/ir/const_array.h"
+#include "retdec/llvmir2hll/ir/const_null_pointer.h"
+#include "retdec/llvmir2hll/ir/const_string.h"
+#include "retdec/llvmir2hll/ir/const_struct.h"
+#include "retdec/llvmir2hll/ir/deref_op_expr.h"
+#include "retdec/llvmir2hll/ir/function.h"
+#include "retdec/llvmir2hll/ir/module.h"
+#include "retdec/llvmir2hll/ir/statement.h"
+#include "retdec/llvmir2hll/ir/var_def_stmt.h"
+#include "retdec/llvmir2hll/ir/variable.h"
+#include "retdec/llvmir2hll/obtainer/call_info_obtainer.h"
+#include "retdec/llvmir2hll/optimizer/optimizers/copy_propagation_optimizer.h"
+#include "retdec/llvmir2hll/support/debug.h"
+#include "retdec/llvmir2hll/utils/ir.h"
+#include "retdec/utils/container.h"
 
-using tl_cpputils::hasItem;
+using retdec::utils::hasItem;
 
+namespace retdec {
 namespace llvmir2hll {
 
 namespace {
@@ -143,7 +144,7 @@ auto ordered(const DefUseChains::DefUseChain &du) {
 			const auto &s2PredSize = s2->getNumberOfPredecessors();
 			if (s1PredSize != s2PredSize) {
 				return s1PredSize < s2PredSize;
-			} else if (s1PredSize > 0 && s1PredSize > 0) {
+			} else if (s1PredSize > 0 && s2PredSize > 0) {
 				const auto &s1Pred = *s1->predecessor_begin();
 				const auto &s2Pred = *s2->predecessor_begin();
 				cmpResult = compareStmtsInDUChains(s1Pred, s2Pred);
@@ -233,7 +234,7 @@ void CopyPropagationOptimizer::performOptimization() {
 
 	// For each def-use chain...
 	// We have to iterate over an ordered DU chain to make the optimization
-	// deterministic (#1386).
+	// deterministic.
 	for (const auto &du : ordered(ducs->du)) {
 		// Currently, the optimizer is unable to optimize cases when there is
 		// more than one use. If this is the case, skip the chain to make the
@@ -271,7 +272,7 @@ void CopyPropagationOptimizer::performOptimization() {
 
 	// Remove statements that are to be removed and update the CFG.
 	// We have to iterate over ordered statements to make the optimization
-	// deterministic (#1386).
+	// deterministic.
 	for (const auto &stmt : ordered(toRemoveStmtsPreserveCalls)) {
 		// Since there may be function calls in the statement, we have to
 		// preserve them. Therefore, we store the result of
@@ -367,8 +368,7 @@ void CopyPropagationOptimizer::handleCaseEmptyUses(ShPtr<Statement> stmt,
 		return;
 	}
 
-	// Do not optimize external variables (used in a volatile load/store, see
-	// #1146).
+	// Do not optimize external variables (used in a volatile load/store).
 	if (stmtLhsVar->isExternal()) {
 		return;
 	}
@@ -422,8 +422,7 @@ void CopyPropagationOptimizer::handleCaseSingleUse(ShPtr<Statement> stmt,
 		return;
 	}
 
-	// Do not optimize external variables (used in a volatile load/store, see
-	// #1146).
+	// Do not optimize external variables (used in a volatile load/store).
 	if (stmtLhsVar->isExternal()) {
 		return;
 	}
@@ -697,8 +696,7 @@ bool CopyPropagationOptimizer::shouldBeIncludedInDefUseChains(
 		return false;
 	}
 
-	// Do not optimize external variables (used in a volatile load/store, see
-	// #1146).
+	// Do not optimize external variables (used in a volatile load/store).
 	if (var->isExternal()) {
 		return false;
 	}
@@ -707,3 +705,4 @@ bool CopyPropagationOptimizer::shouldBeIncludedInDefUseChains(
 }
 
 } // namespace llvmir2hll
+} // namespace retdec

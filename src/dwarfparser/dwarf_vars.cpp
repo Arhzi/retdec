@@ -7,14 +7,14 @@
 #include <iomanip>
 #include <iostream>
 
-#include "dwarfparser/dwarf_file.h"
-#include "dwarfparser/dwarf_functions.h"
-#include "dwarfparser/dwarf_vars.h"
+#include "retdec/dwarfparser/dwarf_file.h"
+#include "retdec/dwarfparser/dwarf_functions.h"
+#include "retdec/dwarfparser/dwarf_vars.h"
 
 using namespace std;
 
-namespace dwarfparser
-{
+namespace retdec {
+namespace dwarfparser {
 
 /**
  * @brief ctor.
@@ -151,7 +151,7 @@ DwarfVar *DwarfVarContainer::getVarByName(string n)
  * @return Added parameter or existing one.
  *
  * TODO: podla mena to nie je 100%, v jednom DIE nemusi byt meno nastavene.
- * v priklade z #820 by sa dali unikatne prepojit podla DW_AT_decl_file + DW_AT_decl_line.
+ * V jednom samplu sa dali unikatne prepojit podla DW_AT_decl_file + DW_AT_decl_line.
  * neviem ale ci je toto nastaven vzdy, ideal by bolo kontextove nacitanie, ktore by vedelo
  * ku ktorej funkcii parameter partri, ktory v poradi je a ak by na tom indexe uz nieco
  * existovalo tak by sa to len aktualizovalo a nevytvaralo nove.
@@ -323,3 +323,4 @@ bool DwarfVar::isVolatile() const
 }
 
 } // namespace dwarfparser
+} // namespace retdec
