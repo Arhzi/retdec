@@ -246,6 +246,7 @@ void MachOFormat::initStructures()
 		loadCommands();
 		loadStrings();
 		loadImpHash();
+		loadExpHash();
 	}
 }
 
@@ -384,7 +385,7 @@ void MachOFormat::handleScatteredRelocation(std::uint32_t firstDword, Relocation
 	unsigned rLength = (firstDword & 0x30000000) >> 28;
 	unsigned rAddress = firstDword & 0x00FFFFFF;
 
-	if (rType == GENERIC_RELOC_PAIR)
+	if ((is32 || isPowerPc()) && rType == GENERIC_RELOC_PAIR)
 	{
 		// Ignore pair relocations
 		return;
@@ -424,7 +425,7 @@ void MachOFormat::handleRelocation(std::uint32_t firstDword, std::uint32_t secon
 	unsigned rExtern = isLittle ? (secondDword & 0x08000000) >> 27 : (secondDword & 0x00000010) >> 4;
 	unsigned rLength =  isLittle ? (secondDword & 0x06000000) >> 25 : (secondDword & 0x00000060) >> 5;
 
-	if (rType == GENERIC_RELOC_PAIR)
+	if ((is32 || isPowerPc()) && rType == GENERIC_RELOC_PAIR)
 	{
 		// Ignore pair relocations
 		return;
@@ -697,7 +698,6 @@ void MachOFormat::loadDylibCommand(const llvm::object::MachOObjectFile::LoadComm
  */
 void MachOFormat::symtabCommand()
 {
-	auto *symbolTable = new SymbolTable();
 	auto command = file->getSymtabLoadCommand();
 	const char *strPtr = fileBuffer.get()->getBufferStart() + command.stroff + chosenArchOffset;
 	const char *endPtr = chosenArchSize ? fileBuffer.get()->getBufferStart() + chosenArchOffset + chosenArchSize : fileBuffer.get()->getBufferEnd();
@@ -706,6 +706,7 @@ void MachOFormat::symtabCommand()
 		return;
 	}
 
+	auto *symbolTable = new SymbolTable();
 	llvm::StringRef strTable = llvm::StringRef(strPtr, endPtr - strPtr);
 	const char *ptr = fileBuffer.get()->getBufferStart() + command.symoff + chosenArchOffset;
 
@@ -810,7 +811,6 @@ void MachOFormat::getImportsFromSection(const MachOSection *secPtr)
 	unsigned long long tableIndex = secPtr->getReserved1();
 	unsigned long long count = 0;
 	unsigned align = is32 ? 4 : 8;
-	Import import;
 
 	if(secPtr->getSizeInMemory(count) && tableIndex)
 	{
@@ -822,9 +822,10 @@ void MachOFormat::getImportsFromSection(const MachOSection *secPtr)
 			{
 				continue;
 			}
-			import = symbols[indirectTable[i]].getAsImport();
-			import.setAddress(sectionAddress);
-			importTable->addImport(import);
+
+			auto import = symbols[indirectTable[i]].getAsImport();
+			import->setAddress(sectionAddress);
+			importTable->addImport(std::move(import));
 			sectionAddress += align;
 		}
 	}
@@ -936,18 +937,18 @@ void MachOFormat::dyldInfoCommand(const llvm::object::MachOObjectFile::LoadComma
 	{
 		importTable = new ImportTable;
 	}
-	Import importSym;
 
 	if(startPtr + command.bind_off + command.bind_size <= endPtr)
 	{
 		for(const auto &importRef : file->bindTable())
 		{
-			if(!getImportFromBindEntry(importRef, importSym))
+			auto importSym = getImportFromBindEntry(importRef);
+			if(!importSym)
 			{
 				break;
 			}
 
-			importTable->addImport(importSym);
+			importTable->addImport(std::move(importSym));
 		}
 	}
 
@@ -955,12 +956,13 @@ void MachOFormat::dyldInfoCommand(const llvm::object::MachOObjectFile::LoadComma
 	{
 		for(const auto &importRef : file->lazyBindTable())
 		{
-			if(!getImportFromBindEntry(importRef, importSym))
+			auto importSym = getImportFromBindEntry(importRef);
+			if(!importSym)
 			{
 				break;
 			}
 
-			importTable->addImport(importSym);
+			importTable->addImport(std::move(importSym));
 		}
 	}
 
@@ -968,12 +970,13 @@ void MachOFormat::dyldInfoCommand(const llvm::object::MachOObjectFile::LoadComma
 	{
 		for(const auto &importRef : file->weakBindTable())
 		{
-			if(!getImportFromBindEntry(importRef, importSym))
+			auto importSym = getImportFromBindEntry(importRef);
+			if(!importSym)
 			{
 				break;
 			}
 
-			importTable->addImport(importSym);
+			importTable->addImport(std::move(importSym));
 		}
 	}
 }
@@ -981,22 +984,23 @@ void MachOFormat::dyldInfoCommand(const llvm::object::MachOObjectFile::LoadComma
 /**
  * Convert MachOBindEntry to import
  * @param input Source entry
- * @param result Import
+ * @return Import
  *
  * Segments have to be loaded before calling this function
  */
-bool MachOFormat::getImportFromBindEntry(const llvm::object::MachOBindEntry &input, Import &result)
+std::unique_ptr<Import> MachOFormat::getImportFromBindEntry(const llvm::object::MachOBindEntry &input)
 {
 	if(input.malformed() || input.segmentIndex() >= getDeclaredNumberOfSegments())
 	{
-		return false;
+		return nullptr;
 	}
 
-	result.setName(input.symbolName());
-	result.setLibraryIndex(input.ordinal() - 1);
-	result.invalidateOrdinalNumber();
-	result.setAddress(getSegment(input.segmentIndex())->getAddress() + input.segmentOffset());
-	return true;
+	auto result = std::make_unique<Import>();
+	result->setName(input.symbolName());
+	result->setLibraryIndex(input.ordinal() - 1);
+	result->invalidateOrdinalNumber();
+	result->setAddress(getSegment(input.segmentIndex())->getAddress() + input.segmentOffset());
+	return result;
 }
 
 /**

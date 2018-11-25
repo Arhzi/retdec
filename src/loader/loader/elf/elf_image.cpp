@@ -152,7 +152,6 @@ bool ElfImage::loadRelocatableFile()
 		}
 	}
 
-
 	// If none of the sections has SHF_ALLOC flag, then just try to load all SHT_PROGBITS and SHT_NOBITS sections.
 	std::function<bool(retdec::fileformat::ElfSection*)> canLoadSection = [](retdec::fileformat::ElfSection* elfSec) { return elfSec->getElfFlags() & SHF_ALLOC; };
 	if (!std::any_of(sections.begin(), sections.end(), [&canLoadSection](retdec::fileformat::Section* sec) { return canLoadSection(static_cast<retdec::fileformat::ElfSection*>(sec)); }))
@@ -238,7 +237,15 @@ ElfImage::SegmentToSectionsTable ElfImage::createSegmentToSectionsTable()
 		std::uint64_t address = elfSeg->getAddress();
 		std::uint64_t fileOffset = elfSeg->getOffset();
 		std::uint64_t fileSize = elfSeg->getLoadedSize();
-		retdec::utils::Range<std::uint64_t> segRange = retdec::utils::Range<std::uint64_t>(address, address + (memSize ? memSize - 1 : 0));
+		std::uint64_t endAddress = address + (memSize ? memSize : 1);
+
+		if (address > endAddress)
+		{
+			// Invalid data - return only partially loaded map
+			return segToSecsTable;
+		}
+
+		retdec::utils::Range<std::uint64_t> segRange = retdec::utils::Range<std::uint64_t>(address, endAddress);
 
 		for (const auto& sec : sections)
 		{
@@ -265,7 +272,7 @@ ElfImage::SegmentToSectionsTable ElfImage::createSegmentToSectionsTable()
 				continue;
 
 			std::uint64_t start = elfSec->getAddress();
-			std::uint64_t end = elfSec->getAddress() + (elfSec->getLoadedSize() ? elfSec->getLoadedSize() - 1 : 0);
+			std::uint64_t end = elfSec->getAddress() + (elfSec->getLoadedSize() ? elfSec->getLoadedSize() : 1);
 
 			auto overlapResult = OverlapResolver::resolve(segRange, retdec::utils::Range<std::uint64_t>(start, end));
 			switch (overlapResult.getOverlap())
@@ -300,7 +307,13 @@ const Segment* ElfImage::addSegment(const retdec::fileformat::SecSeg* secSeg, st
 	}
 
 	std::uint64_t start = address;
-	std::uint64_t end = memSize ? address + memSize - 1 : address;
+	std::uint64_t end = memSize ? address + memSize : address + 1;
+
+	if (start > end)
+	{
+		// This may happen with some broken binaries and may lead to abort
+		return nullptr;
+	}
 
 	// Because we iterate over getSegments() here, we cannot afford to modify it during loop, it would break iterators.
 	// We need to store what to add and remove and do it after the loop.

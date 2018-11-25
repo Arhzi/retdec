@@ -13,7 +13,6 @@
 #include "retdec/cpdetect/settings.h"
 #include "retdec/cpdetect/utils/version_solver.h"
 
-
 using namespace retdec::fileformat;
 using namespace retdec::utils;
 using namespace yaracpp;
@@ -458,7 +457,7 @@ ReturnCode CompilerDetector::getAllCompilers()
 {
 	const auto status = getAllSignatures();
 	getAllHeuristics();
-	std::sort(toolInfo.detectedTools.begin(), toolInfo.detectedTools.end(), compareForSort);
+	std::stable_sort(toolInfo.detectedTools.begin(), toolInfo.detectedTools.end(), compareForSort);
 	removeUnusedCompilers();
 	if (toolInfo.detectedLanguages.empty())
 	{
@@ -498,7 +497,7 @@ ReturnCode CompilerDetector::getAllInformation()
 	toolInfo.entryPointAddress = fileParser.getEpAddress(toolInfo.epAddress);
 	toolInfo.entryPointOffset = fileParser.getEpOffset(toolInfo.epOffset);
 	const bool invalidEntryPoint = !toolInfo.entryPointAddress || !toolInfo.entryPointOffset;
-	if (!fileParser.getHexEpBytes(toolInfo.epBytes, EP_BYTES_SIZE)
+	if (!fileParser.getHexEpBytes(toolInfo.epBytes, cpParams.epBytesCount)
 			&& !invalidEntryPoint && !fileParser.isInValidState())
 	{
 		return ReturnCode::FILE_PROBLEM;

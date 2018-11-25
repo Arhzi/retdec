@@ -109,7 +109,6 @@ bool LLVMSupport::isInlinableInst(const llvm::Instruction *i) {
 	//         store i32 0, i32* @var, align 4
 	//         ret i32 %result
 
-
 	// Always inline GEP instructions (this fixes several problems with invalid
 	// generated code for structure/array indexing; e.g. when the same index
 	// computed by a GEP instruction is used more than once.
@@ -118,7 +117,7 @@ bool LLVMSupport::isInlinableInst(const llvm::Instruction *i) {
 
 	// Always inline cast instructions (this prevents emission of useless
 	// temporary variables).
-	if (llvm::isa<llvm::BitCastInst>(i))
+	if (llvm::isa<llvm::AddrSpaceCastInst>(i) || llvm::isa<llvm::BitCastInst>(i))
 		return true;
 
 	// Always inline CMP instructions, even if they are shared by multiple

@@ -22,14 +22,22 @@ namespace utils {
 namespace {
 
 /**
-* @brief Returns @c true if @c is non-printable character, @c false otherwise.
-*/
-bool isNonprintableChar(unsigned char c) {
-	return !isprint(c);
+ * @brief Our alternative to std::isprint() which can be inconsistent for '\t'
+ *        - true on windows, false on other systems.
+ */
+bool isPrintableChar(unsigned char c) {
+	return std::isprint(c) && !std::iscntrl(c);
 }
 
 /**
-* @brief Returns @c true if @c is non-ascii character, @c false otherwise.
+* @brief Returns @c true if @c is non-printable character, @c false otherwise.
+*/
+bool isNonprintableChar(unsigned char c) {
+	return !isPrintableChar(c);
+}
+
+/**
+* @brief Returns @c true if @c is non-ASCII character, @c false otherwise.
 */
 bool isNonasciiChar(unsigned char c) {
 	return c > 0x7f;
@@ -88,7 +96,7 @@ bool isPrintable(WideCharType c) {
 	// std::isprint() returns true for all characters with an ASCII code
 	// greater than 0x1f (US), except 0x7f (DEL). However, we also want to
 	// consider other characters as printable in the form of escape sequences.
-	return std::isprint(c) || std::isspace(c) || c == '\a' || c == '\b';
+	return isPrintableChar(c) || std::isspace(c) || c == '\a' || c == '\b';
 }
 
 /**
@@ -152,7 +160,7 @@ bool canBeAppendedLiterally(WideCharType c, bool lastWasHex) {
 	// in which case we cannot append hexadecimal digits explicitly (they may
 	// be considered as a continuation of the previous character, e.g. "\x00a"
 	// is a single character).
-	return std::isprint(c) && (!lastWasHex || !std::isxdigit(c));
+	return isPrintableChar(c) && (!lastWasHex || !std::isxdigit(c));
 }
 
 /**
@@ -238,7 +246,7 @@ bool hasNonprintableChars(const std::string &str) {
 
 /**
 * @brief Returns @c true if the given string contains at least one
-*        non-ascii character.
+*        non-ASCII character.
 */
 bool hasNonasciiChars(const std::string &str) {
 	return std::any_of(str.begin(), str.end(),
@@ -662,7 +670,7 @@ std::string replaceNonprintableChars(const std::string &str) {
 }
 
 /**
-* @brief Replaces non-ascii characters in @a str with their hexadecimal
+* @brief Replaces non-ASCII characters in @a str with their hexadecimal
 *        values.
 */
 std::string replaceNonasciiChars(const std::string &str) {
@@ -774,7 +782,7 @@ bool isIdentifier(const std::string &str)
 bool isPrintable(const std::string &str)
 {
 	for (unsigned char c : str) {
-		if (!std::isprint(c)) {
+		if (!isPrintableChar(c)) {
 			return false;
 		}
 	}
@@ -819,7 +827,7 @@ bool isContolCharacter(char c) {
  *         @c False otherwise.
  */
 bool isNiceCharacter(unsigned char c) {
-	return ::isprint(c) || isContolCharacter(c);
+	return isPrintableChar(c) || isContolCharacter(c);
 }
 
 /**

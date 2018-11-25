@@ -34,7 +34,7 @@ bool isSubpattern(const Pattern &a, const Pattern &b)
 		{
 			continue;
 		}
-		aCont.insert(AddressRange(res1, res1 + res2 - 1));
+		aCont.insert(AddressRange(res1, res1 + res2));
 	}
 
 	if(aCont.empty())
@@ -50,7 +50,7 @@ bool isSubpattern(const Pattern &a, const Pattern &b)
 		{
 			continue;
 		}
-		auto bRange = AddressRange(res1, res1 + res2 - 1);
+		auto bRange = AddressRange(res1, res1 + res2);
 		if(std::none_of(aCont.begin(), aCont.end(),
 			[&] (const auto &aRange)
 			{
@@ -763,6 +763,16 @@ std::string FileInformation::getRichHeaderRecordNumberOfUsesStr(std::size_t posi
 }
 
 /**
+ * Get rich header raw bytes as string
+ * @return Raw bytes of rich header as string
+ */
+std::string FileInformation::getRichHeaderRawBytesStr() const
+{
+	auto rawBytes = richHeader.getRawBytes();
+	return std::string{rawBytes.begin(), rawBytes.end()};
+}
+
+/**
  * Find out if there are any records in rich header
  * @return @c true if rich header is not empty, @c false otherwise
  */
@@ -864,6 +874,16 @@ std::string FileInformation::getImphashSha256() const
 }
 
 /**
+ * Get import
+ * @param position Index of selected import (indexed from 0)
+ * @return Name of selected import
+ */
+const retdec::fileformat::Import* FileInformation::getImport(std::size_t position) const
+{
+	return importTable.getImport(position);
+}
+
+/**
  * Get import name
  * @param position Index of selected import (indexed from 0)
  * @return Name of selected import
@@ -921,6 +941,33 @@ bool FileInformation::hasImportTableRecords() const
 std::size_t FileInformation::getNumberOfStoredExports() const
 {
 	return exportTable.getNumberOfExports();
+}
+
+/**
+ * Get exphash as CRC32
+ * @return Exphash as CRC32
+ */
+std::string FileInformation::getExphashCrc32() const
+{
+	return exportTable.getExphashCrc32();
+}
+
+/**
+ * Get exphash as MD5
+ * @return Exphash as MD5
+ */
+std::string FileInformation::getExphashMd5() const
+{
+	return exportTable.getExphashMd5();
+}
+
+/**
+ * Get exphash as SHA256
+ * @return Exphash as SHA256
+ */
+std::string FileInformation::getExphashSha256() const
+{
+	return exportTable.getExphashSha256();
 }
 
 /**
@@ -1001,6 +1048,42 @@ std::string FileInformation::getResourceMd5(std::size_t index) const
 std::string FileInformation::getResourceSha256(std::size_t index) const
 {
 	return resourceTable.getResourceSha256(index);
+}
+
+/**
+ * Get iconhash as CRC32
+ * @return ResourceIconhash as CRC32
+ */
+std::string FileInformation::getResourceIconhashCrc32() const
+{
+	return resourceTable.getResourceIconhashCrc32();
+}
+
+/**
+ * Get iconhash as MD5
+ * @return ResourceIconhash as MD5
+ */
+std::string FileInformation::getResourceIconhashMd5() const
+{
+	return resourceTable.getResourceIconhashMd5();
+}
+
+/**
+ * Get iconhash as SHA256
+ * @return ResourceIconhash as SHA256
+ */
+std::string FileInformation::getResourceIconhashSha256() const
+{
+	return resourceTable.getResourceIconhashSha256();
+}
+
+/**
+ * Get icon perceptual hash as AvgHash
+ * @return Icon perceptual hash as AvgHash
+ */
+std::string FileInformation::getResourceIconPerceptualAvgHash() const
+{
+	return resourceTable.getResourceIconPerceptualAvgHash();
 }
 
 /**
@@ -1097,6 +1180,15 @@ std::string FileInformation::getResourceOffsetStr(std::size_t index, std::ios_ba
 std::string FileInformation::getResourceSizeStr(std::size_t index, std::ios_base &(* format)(std::ios_base &)) const
 {
 	return resourceTable.getResourceSizeStr(index, format);
+}
+
+/**
+ * Find out if there are any records in resource table
+ * @return @c true if resource table is not empty, @c false otherwise
+ */
+bool FileInformation::hasResourceTableRecords() const
+{
+	return resourceTable.hasRecords();
 }
 
 /**
@@ -2028,7 +2120,6 @@ std::size_t FileInformation::getNumberOfStoredSymbolsInTable(std::size_t positio
 	return symbolTables[position].getNumberOfStoredSymbols();
 }
 
-
 /**
  * Get number of symbols stored in symbol table
  * @param position Position of table in internal list of symbol tables (0..x)
@@ -2041,7 +2132,6 @@ std::string FileInformation::getNumberOfDeclaredSymbolsInTableStr(std::size_t po
 {
 	return symbolTables[position].getNumberOfDeclaredSymbolsStr();
 }
-
 
 /**
  * Get name of symbol table
@@ -2612,6 +2702,24 @@ std::string FileInformation::isSignatureVerifiedStr(const std::string& t, const 
 }
 
 /**
+ * Get ELF notes
+ * @return vector with ELF notes
+ */
+const std::vector<ElfNotes>& FileInformation::getElfNotes() const
+{
+	return elfNotes;
+}
+
+/**
+ * Get ELF core info
+ * @return ELF core info
+ */
+const ElfCore& FileInformation::getElfCoreInfo() const
+{
+	return elfCoreInfo;
+}
+
+/**
  * Get number of detected compilers or packers
  * @return Number of detected compilers or packers
  */
@@ -2717,6 +2825,15 @@ const std::string& FileInformation::getLoaderStatusMessage() const
 }
 
 /**
+* Gets loader error message.
+* @return The error message of the loader.
+*/
+const retdec::fileformat::LoaderErrorInfo & FileInformation::getLoaderErrorInfo() const
+{
+	return loaderInfo.getLoaderErrorInfo();
+}
+
+/**
  * Checks whether .NET information are used.
  * @return @c true if it is used, otherwise @c false/
  */
@@ -2732,6 +2849,92 @@ bool FileInformation::isDotnetUsed() const
 const std::string& FileInformation::getDotnetRuntimeVersion() const
 {
 	return dotnetInfo.getRuntimeVersion();
+}
+
+/**
+ * Get imported class name
+ * @param position Index of selected imported class (indexed from 0)
+ * @return Name of selected imported class
+ */
+std::string FileInformation::getDotnetImportedClassName(std::size_t position) const
+{
+	return dotnetInfo.getImportedClassName(position);
+}
+
+/**
+ * Get imported class nested name
+ * @param position Index of selected imported class (indexed from 0)
+ * @return Nested name of selected imported class
+ */
+std::string FileInformation::getDotnetImportedClassNestedName(std::size_t position) const
+{
+	return dotnetInfo.getImportedClassNestedName(position);
+}
+
+/**
+ * Get imported class name with parent class presentation index
+ * @param position Index of selected imported class (indexed from 0)
+ * @return Name of selected imported class with parent class presentation index
+ */
+std::string FileInformation::getDotnetImportedClassNameWithParentClassIndex(std::size_t position) const
+{
+	return dotnetInfo.getImportedClassNameWithParentClassIndex(position);
+}
+
+/**
+ * Get imported class library name
+ * @param position Index of selected imported class (indexed from 0)
+ * @return Library name of selected imported class
+ */
+std::string FileInformation::getDotnetImportedClassLibName(std::size_t position) const
+{
+	return dotnetInfo.getImportedClassLibName(position);
+}
+
+/**
+ * Get imported class namespace
+ * @param position Index of selected imported class (indexed from 0)
+ * @return Namespace of selected imported class
+ */
+std::string FileInformation::getDotnetImportedClassNameSpace(std::size_t position) const
+{
+	return dotnetInfo.getImportedClassNameSpace(position);
+}
+
+/**
+ * Get dotnet typeref hash as CRC32
+ * @return Typeref hash as CRC32
+ */
+std::string FileInformation::getDotnetTypeRefhashCrc32() const
+{
+	return dotnetInfo.getTypeRefhashCrc32();
+}
+
+/**
+ * Get dotnet typeref hash as MD5
+ * @return Typeref hash as MD5
+ */
+std::string FileInformation::getDotnetTypeRefhashMd5() const
+{
+	return dotnetInfo.getTypeRefhashMd5();
+}
+
+/**
+ * Get dotnet typeref hash as SHA256
+ * @return Typeref hash as SHA256
+ */
+std::string FileInformation::getDotnetTypeRefhashSha256() const
+{
+	return dotnetInfo.getTypeRefhashSha256();
+}
+
+/**
+ * Get number of stored imported dotnet classes
+ * @return Number of stored imported dotnet classes
+ */
+std::size_t FileInformation::getNumberOfStoredDotnetImportedClasses() const
+{
+	return dotnetInfo.getNumberOfImportedClasses();
 }
 
 /**
@@ -2932,6 +3135,15 @@ bool FileInformation::hasDotnetUserStringStream() const
 bool FileInformation::hasDotnetTypeLibId() const
 {
 	return dotnetInfo.hasTypeLibId();
+}
+
+/**
+ * Find out if there are any records in typeref table
+ * @return @c true if typeref is not empty, @c false otherwise
+ */
+bool FileInformation::hasDotnetTypeRefTableRecords() const
+{
+	return dotnetInfo.hasImportedClassListRecords();
 }
 
 /**
@@ -3439,6 +3651,15 @@ void FileInformation::setExportTable(const retdec::fileformat::ExportTable *sTab
 }
 
 /**
+ * Set resource table
+ * @param sTable Information about resource table
+ */
+void FileInformation::setResourceTable(const retdec::fileformat::ResourceTable *sTable)
+{
+	resourceTable.setTable(sTable);
+}
+
+/**
  * Set pointer to detected strings
  * @param sStrings Pointer to detected strings
  */
@@ -3481,6 +3702,15 @@ void FileInformation::setLoadedBaseAddress(unsigned long long baseAddress)
 void FileInformation::setLoaderStatusMessage(const std::string& statusMessage)
 {
 	loaderInfo.setStatusMessage(statusMessage);
+}
+
+/**
+* Sets loader error message.
+* @param ldrErrInfo The loader error message.
+*/
+void FileInformation::setLoaderErrorInfo(const retdec::fileformat::LoaderErrorInfo & ldrErrInfo)
+{
+	loaderInfo.setLoaderErrorInfo(ldrErrInfo);
 }
 
 /**
@@ -3598,6 +3828,33 @@ void FileInformation::setDotnetImportedClassList(const std::vector<std::shared_p
 }
 
 /**
+ * Sets .NET typeref hash as CRC32.
+ * @param crc32 Hash as CRC32.
+ */
+void FileInformation::setDotnetTypeRefhashCrc32(const std::string& crc32)
+{
+	dotnetInfo.setTypeRefhashCrc32(crc32);
+}
+
+/**
+ * Sets .NET typeref hash as MD5.
+ * @param md5 Hash as MD5.
+ */
+void FileInformation::setDotnetTypeRefhashMd5(const std::string& md5)
+{
+	dotnetInfo.setTypeRefhashMd5(md5);
+}
+
+/**
+ * Sets .NET typeref hash as SHA256.
+ * @param sha256 Hash as SHA256.
+ */
+void FileInformation::setDotnetTypeRefhashSha256(const std::string& sha256)
+{
+	dotnetInfo.setTypeRefhashSha256(sha256);
+}
+
+/**
  * Add file flag descriptor
  * @param descriptor Descriptor (full description of flag)
  * @param abbreviation Abbreviation (short description of flag)
@@ -3631,23 +3888,6 @@ void FileInformation::addDllFlagsDescriptor(std::string descriptor, std::string 
 void FileInformation::clearDllFlagsDescriptors()
 {
 	header.clearDllFlagsDescriptors();
-}
-
-/**
- * Add resource to resource table
- * @param resource Resource to add
- */
-void FileInformation::addResource(Resource &resource)
-{
-	resourceTable.addResource(resource);
-}
-
-/**
- * Delete all resources from resource table
- */
-void FileInformation::clearResources()
-{
-	resourceTable.clearResources();
 }
 
 /**
@@ -3702,6 +3942,25 @@ void FileInformation::addRelocationTable(RelocationTable &table)
 void FileInformation::addDynamicSection(DynamicSection &section)
 {
 	dynamicSections.push_back(section);
+}
+
+/**
+ * Add ELF notes
+ * @param notes Loaded ELF notes
+ */
+void FileInformation::addElfNotes(ElfNotes& notes)
+{
+	elfNotes.push_back(notes);
+}
+
+void FileInformation::addFileMapEntry(const FileMapEntry& entry)
+{
+	elfCoreInfo.addFileMapEntry(entry);
+}
+
+void FileInformation::addAuxVectorEntry(const std::string& name, std::size_t value)
+{
+	elfCoreInfo.addAuxVectorEntry(name, value);
 }
 
 /**

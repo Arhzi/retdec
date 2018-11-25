@@ -1,5 +1,5 @@
 /**
- * @file include/retdec/cpdetec/cptypes.h
+ * @file include/retdec/cpdetect/cptypes.h
  * @brief cpdetectl types and structures.
  * @copyright (c) 2017 Avast Software, licensed under the MIT license
  */
@@ -10,6 +10,7 @@
 #include <limits>
 #include <vector>
 
+#include "retdec/cpdetect/settings.h"
 #include "retdec/fileformat/fftypes.h"
 
 namespace retdec {
@@ -60,6 +61,7 @@ enum class DetectionMethod
 	STRING_SEARCH_H,     ///< specific strings
 	DYNAMIC_ENTRIES_H,   ///< .dynamic section
 	COMMENT_H,           ///< .comment section
+	NOTE_H,              ///< .note section
 	MANIFEST_H,          ///< manifest resource
 	OTHER_H              ///< other heuristic
 };
@@ -109,7 +111,9 @@ struct DetectParams
 	bool internal;  ///< use of internal signature database
 	bool external;  ///< use of external signature database
 
-	DetectParams(SearchType searchType_, bool internal_, bool external_);
+	std::size_t epBytesCount;
+
+	DetectParams(SearchType searchType_, bool internal_, bool external_, std::size_t epBytesCount_ = EP_BYTES_SIZE);
 	~DetectParams();
 };
 
@@ -218,7 +222,6 @@ struct Similarity
 std::string detectionMetodToString(DetectionMethod method);
 std::string toolTypeToString(ToolType toolType);
 std::string packedToString(Packed packed);
-
 
 } // namespace cpdetect
 } // namespace retdec

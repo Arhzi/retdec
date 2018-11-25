@@ -8,8 +8,8 @@ if(CMAKE_CXX_COMPILER)
 endif()
 
 ExternalProject_Add(yaracpp-project
-	URL https://github.com/avast-tl/yaracpp/archive/v1.0.1.zip
-	URL_HASH SHA256=2252ba7cfd9b190d3e260a741bbd2abc0fbd7c0422eb13d878278a89016c4fda
+	URL https://github.com/avast-tl/yaracpp/archive/b92bde0e59e3b75bc445227e04b71105771dee8b.zip
+	URL_HASH SHA256=c8282c51dcc71535cf39b9416dbc5576ed26477234c02f4294e25cdbdda75574
 	DOWNLOAD_NAME yaracpp.zip
 	CMAKE_ARGS
 		# This does not work on MSVC, but may be useful on Linux.
@@ -53,10 +53,10 @@ else()
 endif()
 
 # Compile YARA rules for tools detection.
-set(YARA_COMPILE_SH ${CMAKE_SOURCE_DIR}/support/yara_patterns/tools/compile-yara.sh)
+set(YARA_COMPILE_PY ${CMAKE_SOURCE_DIR}/support/yara_patterns/tools/compile-yara.py)
 install(CODE "
 	execute_process(
-		COMMAND sh \"${YARA_COMPILE_SH}\" \"${YARAC_PATH}\" \"${CMAKE_SOURCE_DIR}\" \"${CMAKE_INSTALL_PREFIX}\"
+		COMMAND ${PYTHON_EXECUTABLE} -u \"${YARA_COMPILE_PY}\" \"${YARAC_PATH}\" \"${CMAKE_SOURCE_DIR}\" \"${CMAKE_INSTALL_PREFIX}\"
 		RESULT_VARIABLE COMPILE_YARA_RES
 	)
 	if(COMPILE_YARA_RES)

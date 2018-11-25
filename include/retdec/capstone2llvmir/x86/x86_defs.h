@@ -1,14 +1,11 @@
 /**
  * @file include/retdec/capstone2llvmir/x86/x86_defs.h
- * @brief Definitions for X86 implementation of @c Capstone2LlvmIrTranslator.
+ * @brief Additional (on top of Capstone) definitions for x86 translator.
  * @copyright (c) 2017 Avast Software, licensed under the MIT license
  */
 
 #ifndef RETDEC_CAPSTONE2LLVMIR_X86_X86_DEFS_H
 #define RETDEC_CAPSTONE2LLVMIR_X86_X86_DEFS_H
-
-namespace retdec {
-namespace capstone2llvmir {
 
 /**
  * A flag register addition to @c x86_reg from capstone/x86.h.
@@ -128,7 +125,17 @@ enum x87_reg_tag
 	X87_REG_TAG7
 };
 
-} // namespace capstone2llvmir
-} // namespace retdec
+/**
+ * Representation of x86 address spaces.
+ *
+ * Based on values in X86ISelDAGToDag.cpp.
+ */
+enum class x86_addr_space
+{
+	DEFAULT = 0,
+	GS = 256,
+	FS = 257,
+	SS = 258
+};
 
 #endif

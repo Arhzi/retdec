@@ -21,7 +21,7 @@ namespace fileinfo {
 class FileInformation
 {
 	private:
-		retdec::cpdetect::ReturnCode status;                  ///< return code
+		retdec::cpdetect::ReturnCode status;           ///< return code
 		std::string filePath;                          ///< path to input file
 		std::string crc32;                             ///< CRC32 of input file
 		std::string md5;                               ///< MD5 of input file
@@ -29,7 +29,7 @@ class FileInformation
 		std::string secCrc32;                          ///< CRC32 of section table
 		std::string secMd5;                            ///< MD5 of section table
 		std::string secSha256;                         ///< SHA256 of section table
-		retdec::fileformat::Format fileFormatEnum;            ///< format of input file in enumeration representation
+		retdec::fileformat::Format fileFormatEnum;     ///< format of input file in enumeration representation
 		std::string fileFormat;                        ///< format of input file in string representation
 		std::string fileClass;                         ///< class of file
 		std::string fileType;                          ///< type of file (e.g. executable file)
@@ -44,6 +44,7 @@ class FileInformation
 		ExportTable exportTable;                       ///< information about exports
 		ResourceTable resourceTable;                   ///< information about resources in input file
 		CertificateTable certificateTable;             ///< information about certificates
+		ElfCore elfCoreInfo;                           ///< information about ELF core files
 		LoaderInfo loaderInfo;                         ///< information about loaded image
 		std::vector<DataDirectory> directories;        ///< information about data directories
 		std::vector<FileSegment> segments;             ///< information about segments in file
@@ -51,11 +52,12 @@ class FileInformation
 		std::vector<SymbolTable> symbolTables;         ///< symbol tables
 		std::vector<RelocationTable> relocationTables; ///< relocation tables
 		std::vector<DynamicSection> dynamicSections;   ///< information about dynamic sections
+		std::vector<ElfNotes> elfNotes;                ///< information about ELF sections
 		std::vector<Pattern> cryptoPatterns;           ///< detected crypto patterns
 		std::vector<Pattern> malwarePatterns;          ///< detected malware patterns
 		std::vector<Pattern> otherPatterns;            ///< other detected patterns
 		Strings strings;                               ///< detected strings
-		retdec::utils::Maybe<bool> signatureVerified; ///< indicates whether the signature is present and if it is verified
+		retdec::utils::Maybe<bool> signatureVerified;  ///< indicates whether the signature is present and if it is verified
 		DotnetInfo dotnetInfo;                         ///< .NET information
 	public:
 		retdec::cpdetect::ToolInformation toolInfo; ///< detected tools
@@ -146,6 +148,7 @@ class FileInformation
 		std::string getRichHeaderRecordMinorVersionStr(std::size_t position) const;
 		std::string getRichHeaderRecordBuildVersionStr(std::size_t position) const;
 		std::string getRichHeaderRecordNumberOfUsesStr(std::size_t position) const;
+		std::string getRichHeaderRawBytesStr() const;
 		bool hasRichHeaderRecords() const;
 		/// @}
 
@@ -165,6 +168,7 @@ class FileInformation
 		std::string getImphashCrc32() const;
 		std::string getImphashMd5() const;
 		std::string getImphashSha256() const;
+		const retdec::fileformat::Import* getImport(std::size_t position) const;
 		std::string getImportName(std::size_t position) const;
 		std::string getImportLibraryName(std::size_t position) const;
 		std::string getImportAddressStr(std::size_t position, std::ios_base &(* format)(std::ios_base &)) const;
@@ -175,6 +179,9 @@ class FileInformation
 		/// @name Getters of @a exportTable
 		/// @{
 		std::size_t getNumberOfStoredExports() const;
+		std::string getExphashCrc32() const;
+		std::string getExphashMd5() const;
+		std::string getExphashSha256() const;
 		std::string getExportName(std::size_t position) const;
 		std::string getExportAddressStr(std::size_t position, std::ios_base &(* format)(std::ios_base &)) const;
 		std::string getExportOrdinalNumberStr(std::size_t position, std::ios_base &(* format)(std::ios_base &)) const;
@@ -187,6 +194,10 @@ class FileInformation
 		std::string getResourceCrc32(std::size_t index) const;
 		std::string getResourceMd5(std::size_t index) const;
 		std::string getResourceSha256(std::size_t index) const;
+		std::string getResourceIconhashCrc32() const;
+		std::string getResourceIconhashMd5() const;
+		std::string getResourceIconhashSha256() const;
+		std::string getResourceIconPerceptualAvgHash() const;
 		std::string getResourceName(std::size_t index) const;
 		std::string getResourceType(std::size_t index) const;
 		std::string getResourceLanguage(std::size_t index) const;
@@ -196,6 +207,7 @@ class FileInformation
 		std::string getResourceSublanguageIdStr(std::size_t index, std::ios_base &(* format)(std::ios_base &)) const;
 		std::string getResourceOffsetStr(std::size_t index, std::ios_base &(* format)(std::ios_base &)) const;
 		std::string getResourceSizeStr(std::size_t index, std::ios_base &(* format)(std::ios_base &)) const;
+		bool hasResourceTableRecords() const;
 		/// @}
 
 		/// @name Getters of @a certificateTable
@@ -383,6 +395,12 @@ class FileInformation
 		std::string isSignatureVerifiedStr(const std::string& t = "true", const std::string& f = "false") const;
 		/// @}
 
+		/// @name Getter of @a elfNotes and associtated structures
+		/// @{
+		const std::vector<ElfNotes>& getElfNotes() const;
+		const ElfCore& getElfCoreInfo() const;
+		/// @}
+
 		/// @name Getters of @a compilerOrPackerInfo
 		/// @{
 		std::size_t getNumberOfDetectedCompilers() const;
@@ -400,12 +418,22 @@ class FileInformation
 		std::string getNumberOfLoadedSegmentsStr(std::ios_base &(* format)(std::ios_base &)) const;
 		const LoadedSegment& getLoadedSegment(std::size_t index) const;
 		const std::string& getLoaderStatusMessage() const;
-		/// @}
+		const retdec::fileformat::LoaderErrorInfo & getLoaderErrorInfo() const;
+	    /// @}
 
 		/// @name Getters of @a dotnetInfo
 		/// @{
 		bool isDotnetUsed() const;
 		const std::string& getDotnetRuntimeVersion() const;
+		std::string getDotnetImportedClassName(std::size_t position) const;
+		std::string getDotnetImportedClassNestedName(std::size_t position) const;
+		std::string getDotnetImportedClassNameWithParentClassIndex(std::size_t position) const;
+		std::string getDotnetImportedClassLibName(std::size_t position) const;
+		std::string getDotnetImportedClassNameSpace(std::size_t position) const;
+		std::string getDotnetTypeRefhashCrc32() const;
+		std::string getDotnetTypeRefhashMd5() const;
+		std::string getDotnetTypeRefhashSha256() const;
+		std::size_t getNumberOfStoredDotnetImportedClasses() const;
 		std::string getDotnetMetadataHeaderAddressStr(std::ios_base &(* format)(std::ios_base &)) const;
 		std::string getDotnetMetadataStreamOffsetStr(std::ios_base &(* format)(std::ios_base &)) const;
 		std::string getDotnetMetadataStreamSizeStr(std::ios_base &(* format)(std::ios_base &)) const;
@@ -427,6 +455,7 @@ class FileInformation
 		bool hasDotnetGuidStream() const;
 		bool hasDotnetUserStringStream() const;
 		bool hasDotnetTypeLibId() const;
+		bool hasDotnetTypeRefTableRecords() const;
 		/// @}
 
 		/// @name Setters
@@ -487,11 +516,13 @@ class FileInformation
 		void setPdbTimeStamp(std::size_t sTimeStamp);
 		void setImportTable(const retdec::fileformat::ImportTable *sTable);
 		void setExportTable(const retdec::fileformat::ExportTable *sTable);
+		void setResourceTable(const retdec::fileformat::ResourceTable *sTable);
 		void setStrings(const std::vector<retdec::fileformat::String> *sStrings);
 		void setCertificateTable(const retdec::fileformat::CertificateTable *sTable);
 		void setSignatureVerified(bool verified);
 		void setLoadedBaseAddress(unsigned long long baseAddress);
 		void setLoaderStatusMessage(const std::string& statusMessage);
+		void setLoaderErrorInfo(const retdec::fileformat::LoaderErrorInfo & ldrErrInfo);
 		void setDotnetUsed(bool set);
 		void setDotnetRuntimeVersion(std::uint64_t majorVersion, std::uint64_t minorVersion);
 		void setDotnetMetadataHeaderAddress(std::uint64_t address);
@@ -504,6 +535,9 @@ class FileInformation
 		void setDotnetTypeLibId(const std::string& typeLibId);
 		void setDotnetDefinedClassList(const std::vector<std::shared_ptr<retdec::fileformat::DotnetClass>>& dotnetClassList);
 		void setDotnetImportedClassList(const std::vector<std::shared_ptr<retdec::fileformat::DotnetClass>>& dotnetClassList);
+		void setDotnetTypeRefhashCrc32(const std::string& crc32);
+		void setDotnetTypeRefhashMd5(const std::string& md5);
+		void setDotnetTypeRefhashSha256(const std::string& sha256);
 		/// @}
 
 		/// @name Other methods
@@ -512,14 +546,15 @@ class FileInformation
 		void clearFileFlagsDescriptors();
 		void addDllFlagsDescriptor(std::string descriptor, std::string abbreviation);
 		void clearDllFlagsDescriptors();
-		void addResource(Resource &resource);
-		void clearResources();
 		void addDataDirectory(DataDirectory &dataDirectory);
 		void addSegment(FileSegment &fileSegment);
 		void addSection(FileSection &fileSection);
 		void addSymbolTable(SymbolTable &table);
 		void addRelocationTable(RelocationTable &table);
 		void addDynamicSection(DynamicSection &section);
+		void addElfNotes(ElfNotes &notes);
+		void addFileMapEntry(const FileMapEntry& entry);
+		void addAuxVectorEntry(const std::string& name, std::size_t value);
 		void addCryptoPattern(Pattern &pattern);
 		void removeRedundantCryptoRules();
 		void sortCryptoPatternMatches();

@@ -74,7 +74,6 @@
 #include "retdec/llvmir2hll/support/funcs_with_prefix_remover.h"
 #include "retdec/llvmir2hll/support/library_funcs_remover.h"
 #include "retdec/llvmir2hll/support/unreachable_code_in_cfg_remover.h"
-#include "retdec/llvmir2hll/support/unreachable_funcs_remover.h"
 #include "retdec/llvmir2hll/utils/ir.h"
 #include "retdec/llvmir2hll/utils/string.h"
 #include "retdec/llvmir2hll/validator/validator.h"
@@ -85,6 +84,8 @@
 #include "retdec/llvmir2hll/var_renamer/var_renamer_factory.h"
 #include "retdec/llvm-support/diagnostics.h"
 #include "retdec/utils/container.h"
+#include "retdec/utils/conversion.h"
+#include "retdec/utils/memory.h"
 #include "retdec/utils/string.h"
 
 using namespace llvm;
@@ -92,7 +93,10 @@ using namespace llvm;
 using retdec::llvmir2hll::ShPtr;
 using retdec::utils::hasItem;
 using retdec::utils::joinStrings;
+using retdec::utils::limitSystemMemory;
+using retdec::utils::limitSystemMemoryToHalfOfTotalSystemMemory;
 using retdec::utils::split;
+using retdec::utils::strToNum;
 
 namespace {
 
@@ -149,10 +153,6 @@ cl::opt<bool> NoSymbolicNames("no-symbolic-names",
 
 cl::opt<bool> KeepAllBrackets("keep-all-brackets",
 	cl::desc("All brackets in the generated code will be kept."),
-	cl::init(false));
-
-cl::opt<bool> KeepUnreachableFuncs("keep-unreachable-funcs",
-	cl::desc("Functions that are unreachable from the main function will be kept, not removed."),
 	cl::init(false));
 
 cl::opt<bool> KeepLibraryFunctions("keep-library-funcs",
@@ -238,6 +238,18 @@ cl::opt<std::string> ForcedModuleName("force-module-name",
 cl::opt<bool> StrictFPUSemantics("strict-fpu-semantics",
 	cl::desc("Forces strict FPU semantics to be used. "
 		"This option may result into more correct code, although slightly less readable."),
+	cl::init(false));
+
+// Does not work with std::size_t or std::uint64_t (passing -max-memory=100
+// fails with "Cannot find option named '100'!"), so we have to use unsigned
+// long long, which should be 64b.
+cl::opt<unsigned long long> MaxMemoryLimit("max-memory",
+	cl::desc("Limit maximal memory to the given number of bytes (0 means no limit)."),
+	cl::init(0));
+
+static cl::opt<bool>
+MaxMemoryLimitHalfRAM("max-memory-half-ram",
+	cl::desc("Limit maximal memory to half of system RAM."),
 	cl::init(false));
 
 cl::opt<std::string> InputFilename(cl::Positional,
@@ -327,6 +339,7 @@ private:
 	}
 
 	bool initialize(Module &m);
+	bool limitMaximalMemoryIfRequested();
 	void createSemantics();
 	void createSemanticsFromParameter();
 	void createSemanticsFromLLVMIR();
@@ -336,7 +349,6 @@ private:
 	void removeLibraryFuncs();
 	void removeCodeUnreachableInCFG();
 	void removeFuncsPrefixedWith(const retdec::llvmir2hll::StringSet &prefixes);
-	void removeUnreachableFuncs();
 	void fixSignedUnsignedTypes();
 	void convertLLVMIntrinsicFunctions();
 	void obtainDebugInfo();
@@ -359,9 +371,6 @@ private:
 		const retdec::llvmir2hll::StringVector &pfsIds);
 	ShPtr<retdec::llvmir2hll::PatternFinderRunner> instantiatePatternFinderRunner() const;
 	retdec::llvmir2hll::StringSet getPrefixesOfFuncsToBeRemoved() const;
-
-	bool unreachableFuncsShouldBeRemoved() const;
-	bool unreachableFuncsWereAlreadyRemoved() const;
 
 private:
 	/// Output stream into which the generated code will be emitted.
@@ -417,6 +426,7 @@ Decompiler::Decompiler(raw_pwrite_stream &out):
 
 bool Decompiler::runOnModule(Module &m) {
 	if (Debug) retdec::llvm_support::printPhase("initialization");
+
 	bool decompilationShouldContinue = initialize(m);
 	if (!decompilationShouldContinue) {
 		return false;
@@ -432,11 +442,6 @@ bool Decompiler::runOnModule(Module &m) {
 	if (!KeepLibraryFunctions) {
 		if (Debug) retdec::llvm_support::printPhase("removing functions from standard libraries");
 		removeLibraryFuncs();
-	}
-
-	if (unreachableFuncsShouldBeRemoved()) {
-		if (Debug) retdec::llvm_support::printPhase("removing functions that are not reachable from main");
-		removeUnreachableFuncs();
 	}
 
 	// The following phase needs to be done right after the conversion because
@@ -516,6 +521,12 @@ bool Decompiler::runOnModule(Module &m) {
 */
 bool Decompiler::initialize(Module &m) {
 	llvmModule = &m;
+
+	// Maximal memory limitation.
+	bool memoryLimitationSucceeded = limitMaximalMemoryIfRequested();
+	if (!memoryLimitationSucceeded) {
+		return false;
+	}
 
 	// Instantiate the requested HLL writer and make sure it exists. We need to
 	// explicitly specify template parameters because raw_pwrite_stream has
@@ -604,6 +615,31 @@ bool Decompiler::initialize(Module &m) {
 	}
 
 	// Everything went OK.
+	return true;
+}
+
+/**
+* @brief Limits the maximal memory of the tool based on the command-line
+*        parameters.
+*/
+bool Decompiler::limitMaximalMemoryIfRequested() {
+	if (MaxMemoryLimitHalfRAM) {
+		auto limitationSucceeded = limitSystemMemoryToHalfOfTotalSystemMemory();
+		if (!limitationSucceeded) {
+			retdec::llvm_support::printErrorMessage(
+				"Failed to limit maximal memory to half of system RAM."
+			);
+			return false;
+		}
+	} else if (MaxMemoryLimit > 0) {
+		auto limitationSucceeded = limitSystemMemory(MaxMemoryLimit);
+		if (!limitationSucceeded) {
+			retdec::llvm_support::printErrorMessage(
+				"Failed to limit maximal memory to " + std::to_string(MaxMemoryLimit) + "."
+			);
+		}
+	}
+
 	return true;
 }
 
@@ -718,24 +754,6 @@ void Decompiler::removeLibraryFuncs() {
 */
 void Decompiler::removeCodeUnreachableInCFG() {
 	retdec::llvmir2hll::UnreachableCodeInCFGRemover::removeCode(resModule);
-}
-
-/**
-* @brief Removes functions that are not reachable from the main function.
-*/
-void Decompiler::removeUnreachableFuncs() {
-	retdec::llvmir2hll::Maybe<std::string> mainFuncName(semantics->getMainFuncName());
-	retdec::llvmir2hll::FuncVector removedFuncs(retdec::llvmir2hll::UnreachableFuncsRemover::removeFuncs(
-		resModule, mainFuncName ? mainFuncName.get() : "main"));
-
-	if (Debug) {
-		// Emit the functions that were removed. Before that, however, sort
-		// them by name to provide a more deterministic output.
-		sortByName(removedFuncs);
-		for (const auto &func : removedFuncs) {
-			retdec::llvm_support::printSubPhase("removing " + func->getName() + "()");
-		}
-	}
 }
 
 /**
@@ -1005,31 +1023,6 @@ ShPtr<retdec::llvmir2hll::PatternFinderRunner> Decompiler::instantiatePatternFin
 */
 retdec::llvmir2hll::StringSet Decompiler::getPrefixesOfFuncsToBeRemoved() const {
 	return config->getPrefixesOfFuncsToBeRemoved();
-}
-
-/**
-* @brief Should unreachable functions be removed?
-*/
-bool Decompiler::unreachableFuncsShouldBeRemoved() const {
-	if (KeepUnreachableFuncs) {
-		return false;
-	}
-
-	if (unreachableFuncsWereAlreadyRemoved()) {
-		return false;
-	}
-
-	return true;
-}
-
-/**
-* @brief Were unreachable functions already removed?
-*/
-bool Decompiler::unreachableFuncsWereAlreadyRemoved() const {
-	return hasItem(
-		resModule->getOptsRunInFrontend(),
-		"unreachable-funcs"
-	);
 }
 
 //

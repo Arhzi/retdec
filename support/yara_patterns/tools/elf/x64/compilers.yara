@@ -1,3 +1,8 @@
+/*
+ * YARA rules for x64 ELF compiler detection.
+ * Copyright (c) 2017 Avast Software, licensed under the MIT license
+ */
+
 import "elf"
 
 rule gcc_470_rhel
@@ -54,7 +59,6 @@ rule tcc_0_9_26
 	condition:
 		$1 at elf.entry_point
 }
-
 
 rule gc_1
 {

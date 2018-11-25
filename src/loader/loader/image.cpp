@@ -300,6 +300,29 @@ const Segment* Image::getEpSegment()
 }
 
 /**
+ * Returns raw segment data together with its size. Caller should never access beyond
+ * `pointer + size` (including). Size is calculated from the physical size of the segment.
+ * Returns pair of null pointer and 0 in case of an error.
+ *
+ * @param address Address to start from.
+ *
+ * @return Raw data pointer and size.
+ */
+std::pair<const std::uint8_t*, std::uint64_t> Image::getRawSegmentData(std::uint64_t address) const
+{
+	auto segment = getSegmentFromAddress(address);
+	if (!segment)
+		return { nullptr, 0 };
+
+	auto offset = address - segment->getAddress();
+	auto rawData = segment->getRawData();
+	if (!rawData.first || offset > rawData.second)
+		return { nullptr, 0 };
+
+	return { rawData.first + offset, rawData.second - offset };
+}
+
+/**
  * Get integer (@a x bytes) located at provided address using the specified endian or default file endian
  *
  * @param address Address to get integer from
@@ -383,12 +406,22 @@ bool Image::setXBytes(std::uint64_t address, const std::vector<std::uint8_t>& va
 /**
  * Find out, if there is a pointer (valid address) on the provided address
  * @param address Address to check
+ * @param pointer If not @c nullptr, and there is a pointer on @p address, then
+ *                set the pointer value to where this parameter points.
  * @return @c True if pointer on address, @c false otherwise
  */
-bool Image::isPointer(std::uint64_t address)
+bool Image::isPointer(std::uint64_t address, std::uint64_t* pointer) const
 {
 	std::uint64_t val = 0;
-	return getWord(address, val) && hasDataOnAddress(val);
+	if (getWord(address, val) && hasDataOnAddress(val))
+	{
+		if (pointer)
+		{
+			*pointer = val;
+		}
+		return true;
+	}
+	return false;
 }
 
 const std::string& Image::getStatusMessage() const
@@ -399,6 +432,11 @@ const std::string& Image::getStatusMessage() const
 void Image::setStatusMessage(const std::string& message)
 {
 	_statusMessage = message;
+}
+
+const retdec::fileformat::LoaderErrorInfo & Image::getLoaderErrorInfo() const
+{
+	return getFileFormat()->getLoaderErrorInfo();
 }
 
 Segment* Image::insertSegment(std::unique_ptr<Segment> segment)

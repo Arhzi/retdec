@@ -627,6 +627,37 @@ void PlainPresentation::presentDotnetClasses() const
 	}
 }
 
+/**
+ * Present ELF notes
+ */
+void PlainPresentation::presentNotes() const
+{
+	auto& notes = fileinfo.getElfNotes();
+	if(notes.empty())
+	{
+		return;
+	}
+
+	presentIterativeDistribution(ElfNotesPlainGetter(fileinfo), explanatory);
+	presentCore();
+}
+
+/**
+ * Present ELF core
+ */
+void PlainPresentation::presentCore() const
+{
+	const auto& core = fileinfo.getElfCoreInfo();
+	if(core.hasAuxVector())
+	{
+		presentIterativeDistribution(ElfAuxVPlainGetter(fileinfo), explanatory);
+	}
+	if(core.hasFileMap())
+	{
+		presentIterativeDistribution(ElfCoreMapPlainGetter(fileinfo), explanatory);
+	}
+}
+
 bool PlainPresentation::present()
 {
 	std::cout << "Input file               : " << fileinfo.getPathToFile() << "\n";
@@ -672,9 +703,12 @@ bool PlainPresentation::present()
 		presentIterativeDistribution(SymbolTablesPlainGetter(fileinfo), explanatory);
 		presentIterativeDistribution(ImportTablePlainGetter(fileinfo), explanatory);
 		presentIterativeDistribution(ExportTablePlainGetter(fileinfo), explanatory);
+		presentIterativeDistribution(TypeRefTablePlainGetter(fileinfo), explanatory);
 		presentIterativeDistribution(RelocationTablesPlainGetter(fileinfo), explanatory);
 		presentIterativeDistribution(DynamicSectionsPlainGetter(fileinfo), explanatory);
 		presentIterativeDistribution(ResourcePlainGetter(fileinfo), explanatory);
+
+		presentNotes();
 
 		auto manifest = fileinfo.getManifest();
 		if(!manifest.empty())

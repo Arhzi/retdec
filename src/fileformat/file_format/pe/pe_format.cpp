@@ -26,6 +26,7 @@
 #include "retdec/fileformat/utils/asn1.h"
 #include "retdec/fileformat/utils/conversions.h"
 #include "retdec/fileformat/utils/file_io.h"
+#include "retdec/crypto/crypto.h"
 
 using namespace retdec::utils;
 using namespace PeLib;
@@ -306,6 +307,18 @@ PeFormat::~PeFormat()
 }
 
 /**
+* Init information from PE loader
+*/
+void PeFormat::initLoaderErrorInfo()
+{
+	PeLib::LoaderError ldrError = file->loaderError();
+
+	_ldrErrInfo.loaderErrorCode = static_cast<std::uint32_t>(ldrError);
+	_ldrErrInfo.loaderError = getLoaderErrorString(ldrError, false);
+	_ldrErrInfo.loaderErrorUserFriendly = getLoaderErrorString(ldrError, true);
+}
+
+/**
  * Init internal structures
  */
 void PeFormat::initStructures()
@@ -332,6 +345,10 @@ void PeFormat::initStructures()
 			file->readResourceDirectory();
 			file->readSecurityDirectory();
 			file->readComHeaderDirectory();
+
+			// Fill-in the loader error info from PE file
+			initLoaderErrorInfo();
+
 			mzHeader = file->mzHeader();
 			switch((peClass = getFileType(filePath)))
 			{
@@ -655,7 +672,6 @@ void PeFormat::loadSymbols()
 void PeFormat::loadImports()
 {
 	std::string libname;
-	Import import;
 
 	for(std::size_t i = 0; formatParser->getImportedLibraryFileName(i, libname); ++i)
 	{
@@ -665,9 +681,11 @@ void PeFormat::loadImports()
 		}
 		importTable->addLibrary(libname);
 
-		for(std::size_t j = 0; formatParser->getImport(i, j, import); ++j)
+		std::size_t index = 0;
+		while (auto import = formatParser->getImport(i, index))
 		{
-			importTable->addImport(import);
+			importTable->addImport(std::move(import));
+			index++;
 		}
 	}
 
@@ -679,16 +697,18 @@ void PeFormat::loadImports()
 		}
 		importTable->addLibrary(libname);
 
-		for(std::size_t j = 0; formatParser->getDelayImport(i, j, import); ++j)
+		std::size_t index = 0;
+		while (auto import = formatParser->getDelayImport(i, index))
 		{
-			import.setLibraryIndex(importTable->getNumberOfLibraries() - 1);
-			importTable->addImport(import);
+			import->setLibraryIndex(importTable->getNumberOfLibraries() - 1);
+			importTable->addImport(std::move(import));
+			index++;
 		}
 	}
 
 	loadImpHash();
 
-	for (auto&& addressRange : formatParser->getImportDirectoryOccupiedAddresses())
+	for(auto&& addressRange : formatParser->getImportDirectoryOccupiedAddresses())
 	{
 		nonDecodableRanges.addRange(std::move(addressRange));
 	}
@@ -714,7 +734,9 @@ void PeFormat::loadExports()
 		exportTable->addExport(newExport);
 	}
 
-	for (auto&& addressRange : formatParser->getExportDirectoryOccupiedAddresses())
+	loadExpHash();
+
+	for(auto&& addressRange : formatParser->getExportDirectoryOccupiedAddresses())
 	{
 		nonDecodableRanges.addRange(std::move(addressRange));
 	}
@@ -812,7 +834,6 @@ void PeFormat::loadResourceNodes(std::vector<const PeLib::ResourceChild*> &nodes
 		return;
 	}
 
-	Resource resource;
 	resourceTable = new ResourceTable();
 	std::size_t firstLeafIndex = 0;
 
@@ -834,10 +855,11 @@ void PeFormat::loadResourceNodes(std::vector<const PeLib::ResourceChild*> &nodes
 		{
 			continue;
 		}
-		resource.setOffset(leaf->getOffsetToData() - rva + formatParser->getResourceDirectoryOffset());
-		resource.setSizeInFile(leaf->getSize());
-		resource.load(this);
-		resourceTable->addResource(resource);
+		auto resource = std::make_unique<Resource>();
+		resource->setOffset(leaf->getOffsetToData() - rva + formatParser->getResourceDirectoryOffset());
+		resource->setSizeInFile(leaf->getSize());
+		resource->load(this);
+		resourceTable->addResource(std::move(resource));
 	}
 }
 
@@ -846,6 +868,7 @@ void PeFormat::loadResourceNodes(std::vector<const PeLib::ResourceChild*> &nodes
  */
 void PeFormat::loadResources()
 {
+	size_t iconGroupIDcounter = 0;
 	unsigned long long rva = 0, size = 0;
 	if(!getDataDirectoryRelative(PELIB_IMAGE_DIRECTORY_ENTRY_RESOURCE, rva, size))
 	{
@@ -864,7 +887,7 @@ void PeFormat::loadResources()
 		return;
 	}
 
-	Resource resource;
+	std::unique_ptr<Resource> resource;
 	resourceTable = new ResourceTable();
 
 	for(std::size_t i = 0, e = levels[0], nSft = 0, lSft = 0; i < e; ++i)
@@ -874,13 +897,15 @@ void PeFormat::loadResources()
 		{
 			continue;
 		}
-		resource.setType(typeChild->getName());
-		resource.invalidateTypeId();
-		if(resource.hasEmptyType())
+
+		bool emptyType = false;
+		auto type = typeChild->getName();
+		if(type.empty())
 		{
-			resource.setTypeId(typeChild->getOffsetToName());
-			resource.setType(mapGetValueOrDefault(resourceTypeMap, typeChild->getOffsetToName(), ""));
+			type = mapGetValueOrDefault(resourceTypeMap, typeChild->getOffsetToName(), "");
+			emptyType = true;
 		}
+
 		nSft += typeChild->getNumberOfChildren();
 
 		for(std::size_t j = 0, f = typeChild->getNumberOfChildren(); j < f; ++j)
@@ -890,12 +915,8 @@ void PeFormat::loadResources()
 			{
 				continue;
 			}
-			resource.setName(nameChild->getName());
-			resource.invalidateNameId();
-			if(resource.hasEmptyName())
-			{
-				resource.setNameId(nameChild->getOffsetToName());
-			}
+
+			auto name = nameChild->getName();
 			lSft += nameChild->getNumberOfChildren();
 
 			for(std::size_t k = 0, g = nameChild->getNumberOfChildren(); k < g; ++k)
@@ -911,24 +932,60 @@ void PeFormat::loadResources()
 				{
 					continue;
 				}
-				resource.setOffset(lanLeaf->getOffsetToData() - rva + formatParser->getResourceDirectoryOffset());
-				resource.setSizeInFile(lanLeaf->getSize());
-				resource.setLanguage(lanChild->getName());
-				resource.invalidateLanguageId();
-				resource.invalidateSublanguageId();
-				if(resource.hasEmptyLanguage())
+
+				if (type == "Icon")
+				{
+					resource = std::make_unique<ResourceIcon>();
+					resourceTable->addResourceIcon(static_cast<ResourceIcon *>(resource.get()));
+				}
+				else if (type == "Icon Group")
+				{
+					auto iGroup = std::make_unique<ResourceIconGroup>();
+					iGroup->setIconGroupID(iconGroupIDcounter);
+					resource = std::move(iGroup);
+					resourceTable->addResourceIconGroup(static_cast<ResourceIconGroup *>(resource.get()));
+					iconGroupIDcounter++;
+				}
+				else
+				{
+					resource = std::make_unique<Resource>();
+				}
+				resource->setType(type);
+				resource->invalidateTypeId();
+				if(emptyType)
+				{
+					resource->setTypeId(typeChild->getOffsetToName());
+				}
+
+				resource->setName(name);
+				resource->invalidateNameId();
+				if(resource->hasEmptyName())
+				{
+					resource->setNameId(nameChild->getOffsetToName());
+				}
+
+				resource->setOffset(lanLeaf->getOffsetToData() - rva + formatParser->getResourceDirectoryOffset());
+				resource->setSizeInFile(lanLeaf->getSize());
+				resource->setLanguage(lanChild->getName());
+				resource->invalidateLanguageId();
+				resource->invalidateSublanguageId();
+				if(resource->hasEmptyLanguage())
 				{
 					const auto lIdAll = lanChild->getOffsetToName();
 					const auto lId = lIdAll & 0x3FF;
-					resource.setLanguageId(lId);
-					resource.setSublanguageId((lIdAll & 0xFC00) >> 10);
-					resource.setLanguage(mapGetValueOrDefault(resourceLanguageMap, lId, ""));
+					resource->setLanguageId(lId);
+					resource->setSublanguageId((lIdAll & 0xFC00) >> 10);
+					resource->setLanguage(mapGetValueOrDefault(resourceLanguageMap, lId, ""));
 				}
-				resource.load(this);
-				resourceTable->addResource(resource);
+				resource->load(this);
+				resourceTable->addResource(std::move(resource));
 			}
 		}
 	}
+
+	resourceTable->linkResourceIconGroups();
+
+	loadResourceIconHash();
 
 	for (auto&& addressRange : formatParser->getResourceDirectoryOccupiedAddresses())
 	{
@@ -975,8 +1032,6 @@ void PeFormat::loadCertificates()
 		return;
 	}
 
-	signatureVerified = verifySignature(p7);
-
 	// Find signer of the application and store its serial number.
 	X509 *signerCert = nullptr;
 	X509 *counterSignerCert = nullptr;
@@ -1020,6 +1075,12 @@ void PeFormat::loadCertificates()
 		BIO_free(bio);
 		return;
 	}
+
+	// Now that we know there is at least a signer or counter-signer, we can
+	// verify the signature. Do not try to verify the signature before
+	// verifying that there is at least a signer or counter-signer as 'p7' is
+	// empty in that case (#87).
+	signatureVerified = verifySignature(p7);
 
 	// Create hash table with key-value pair as subject-X509 certificate so we can easily lookup certificates by their subject name
 	std::unordered_map<std::string, X509*> subjectToCert;
@@ -1098,7 +1159,6 @@ void PeFormat::loadCertificates()
 	PKCS7_free(p7);
 	BIO_free(bio);
 }
-
 
 /**
  * Load .NET headers.
@@ -1206,6 +1266,10 @@ void PeFormat::loadDotnetHeaders()
  */
 bool PeFormat::verifySignature(PKCS7 *p7)
 {
+	// At first, verify that there are data in place where Microsoft Code Signing should be present
+	if (!p7->d.sign->contents->d.other)
+		return false;
+
 	// We need this because PKCS7_verify() looks up algorithms and without this, tables are empty
 	OpenSSL_add_all_algorithms();
 	SCOPE_EXIT {
@@ -1288,32 +1352,40 @@ std::vector<std::tuple<const std::uint8_t*, std::size_t>> PeFormat::getDigestRan
 
 	// To prevent crashes on unordinary binaries, we need to sort these offsets (together with sizes, but they are unimportant for sorting)
 	// Usually, checksum is first, then security directory header and then security directory
-	// There are few binaries where this ordered is not followed
+	// There are a few binaries where this order is not followed
 	std::vector<std::pair<std::size_t, std::size_t>> offsets = { std::make_pair(checksumFileOffset, 4), std::make_pair(secDirFileOffset, 8), std::make_pair(secDirOffset, secDirSize) };
 	std::sort(offsets.begin(), offsets.end(), [](const auto& lhs, const auto& rhs) {
 			return lhs.first < rhs.first;
 		});
 
 	std::size_t lastOffset = 0;
-	for (auto& offset : offsets)
+	for (auto& offsetSize : offsets)
 	{
-		// This offset is completely covered by the last offset so ignore it
-		if (offset.first + offset.second <= lastOffset)
+		// If the length of the range is bigger than the amount of data we have available, then sanitize the length
+		if (offsetSize.second > bytes.size())
+			offsetSize.second = bytes.size();
+
+		// If the range overlaps the end of the file, then sanitize the length
+		if (offsetSize.first + offsetSize.second > bytes.size())
+			offsetSize.second = bytes.size() - offsetSize.first;
+
+		// This offsetSize is completely covered by the last offset so ignore it
+		if (offsetSize.first + offsetSize.second <= lastOffset)
 			continue;
 
-		// This offset is partially covered by the last offset, so shrink it
-		// Shrunk offset begins where the last offset ended
-		if (offset.first <= lastOffset)
+		// This offsetSize is partially covered by the last offset, so shrink it
+		// Shrunk offsetSize begins where the last offset ended
+		if (offsetSize.first <= lastOffset)
 		{
-			offset.second = lastOffset - offset.first;
-			offset.first = lastOffset;
+			offsetSize.second = lastOffset - offsetSize.first;
+			offsetSize.first = lastOffset;
 		}
 
-		result.emplace_back(bytes.data() + lastOffset, offset.first - lastOffset);
-		lastOffset = offset.first + offset.second;
+		result.emplace_back(bytes.data() + lastOffset, offsetSize.first - lastOffset);
+		lastOffset = offsetSize.first + offsetSize.second;
 	}
 
-	// Finish off the data if the last offset didn't end at the end of of all data
+	// Finish off the data if the last offset didn't end at the end of all data
 	if (lastOffset != bytes.size())
 		result.emplace_back(bytes.data() + lastOffset, bytes.size() - lastOffset);
 
@@ -1825,6 +1897,8 @@ void PeFormat::detectDotnetTypes()
 		definedClasses = reconstructor.getDefinedClasses();
 		importedClasses = reconstructor.getReferencedClasses();
 	}
+
+	computeTypeRefHashes();
 }
 
 /**
@@ -1881,6 +1955,147 @@ std::uint64_t PeFormat::detectPossibleMetadataHeaderAddress() const
 	}
 
 	return metadataHeaderFound ? address : 0;
+}
+
+/**
+ * Compute typeref hashes - CRC32, MD5, SHA256.
+ */
+void PeFormat::computeTypeRefHashes()
+{
+	if (!metadataStream || !stringStream)
+	{
+		return;
+	}
+
+	std::vector<std::uint8_t> typeRefHashBytes;
+	std::string typeName;
+	std::string nameSpace;
+	std::string referencedName;
+	MetadataTableType resolutionScopeType;
+	
+	auto typeRefTable = static_cast<const MetadataTable<TypeRef>*>(metadataStream->getMetadataTable(MetadataTableType::TypeRef));
+	auto moduleTable = static_cast<const MetadataTable<DotnetModule>*>(metadataStream->getMetadataTable(MetadataTableType::Module));
+	auto moduleRefTable = static_cast<const MetadataTable<ModuleRef>*>(metadataStream->getMetadataTable(MetadataTableType::ModuleRef));
+	auto assemblyRefTable = static_cast<const MetadataTable<AssemblyRef>*>(metadataStream->getMetadataTable(MetadataTableType::AssemblyRef));
+
+	if (!typeRefTable)
+	{
+		return;
+	}
+
+	for (std::size_t i = 1; i <= typeRefTable->getNumberOfRows(); ++i)
+	{
+		bool validTypeName = false;
+		bool validNameSpace = false;
+		bool validReferencedName = false;
+
+		auto typeRefRow = typeRefTable->getRow(i);
+
+		if (stringStream->getString(typeRefRow->typeName.getIndex(), typeName) && !typeName.empty())
+		{
+			validTypeName = true;
+		}
+		if (stringStream->getString(typeRefRow->typeNamespace.getIndex(), nameSpace) && !nameSpace.empty())
+		{	
+			validNameSpace = true;
+		}
+
+		if (typeRefRow->resolutionScope.getTable(resolutionScopeType))
+		{
+			switch (resolutionScopeType)
+			{
+				case MetadataTableType::TypeRef:
+				{
+					auto typeRef = typeRefTable->getRow(typeRefRow->resolutionScope.getIndex());
+					if (typeRef && stringStream->getString(typeRef->typeName.getIndex(), referencedName) && !referencedName.empty())
+					{
+						referencedName += "TR";
+						validReferencedName = true;
+					}
+					break;
+				}
+				case MetadataTableType::Module:
+				{
+					if (moduleTable)
+					{
+						auto module = moduleTable->getRow(typeRefRow->resolutionScope.getIndex());
+						if (module && stringStream->getString(module->name.getIndex(), referencedName) && !referencedName.empty())
+						{
+							referencedName += "M";
+							validReferencedName = true;
+						}
+					}
+					break;
+				}
+				case MetadataTableType::ModuleRef:
+				{
+					if (moduleRefTable)
+					{
+						auto moduleRef = moduleRefTable->getRow(typeRefRow->resolutionScope.getIndex());
+						if (moduleRef && stringStream->getString(moduleRef->name.getIndex(), referencedName) && !referencedName.empty())
+						{
+							referencedName += "MR";
+							validReferencedName = true;
+						}
+					}
+					break;
+				}
+				case MetadataTableType::AssemblyRef:
+				{
+					if (assemblyRefTable)
+					{
+						auto assemblyRef = assemblyRefTable->getRow(typeRefRow->resolutionScope.getIndex());
+						if (assemblyRef && stringStream->getString(assemblyRef->name.getIndex(), referencedName) && !referencedName.empty())
+						{
+							referencedName += "AR";
+							validReferencedName = true;
+						}
+					}
+					break;
+				}
+				default:
+					break;
+			}
+
+			if (!typeRefHashBytes.empty())
+			{
+				typeRefHashBytes.push_back(static_cast<unsigned char>(','));
+			}
+
+			std::string fullName;
+			if (validTypeName)
+			{
+				fullName = typeName;
+			}
+			if (validNameSpace)
+			{
+				if (!fullName.empty())
+				{
+					fullName += ".";
+				}
+
+				fullName += nameSpace;
+			}
+			if (validReferencedName)
+			{
+				if (!fullName.empty())
+				{
+					fullName += ".";
+				}
+
+				fullName += referencedName;
+			}
+
+			for(const auto c : fullName)
+			{
+				typeRefHashBytes.push_back(static_cast<uint8_t>(c));
+			}
+		}
+	}
+
+	typeRefHashCrc32 = retdec::crypto::getCrc32(typeRefHashBytes.data(), typeRefHashBytes.size());
+	typeRefHashMd5 = retdec::crypto::getMd5(typeRefHashBytes.data(), typeRefHashBytes.size());
+	typeRefHashSha256 = retdec::crypto::getSha256(typeRefHashBytes.data(), typeRefHashBytes.size());
 }
 
 retdec::utils::Endianness PeFormat::getEndianness() const
@@ -2497,6 +2712,22 @@ const std::vector<std::shared_ptr<DotnetClass>>& PeFormat::getDefinedDotnetClass
 const std::vector<std::shared_ptr<DotnetClass>>& PeFormat::getImportedDotnetClasses() const
 {
 	return importedClasses;
+}
+
+
+const std::string& PeFormat::getTypeRefhashCrc32() const
+{
+	return typeRefHashCrc32;
+}
+
+const std::string& PeFormat::getTypeRefhashMd5() const
+{
+	return typeRefHashMd5;
+}
+
+const std::string& PeFormat::getTypeRefhashSha256() const
+{
+	return typeRefHashSha256;
 }
 
 } // namespace fileformat

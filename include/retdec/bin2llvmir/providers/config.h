@@ -13,6 +13,7 @@
 #include <llvm/IR/Module.h>
 
 #include "retdec/utils/address.h"
+#include "retdec/utils/filesystem_path.h"
 
 namespace retdec {
 namespace bin2llvmir {
@@ -28,6 +29,7 @@ class Config
 
 	public:
 		retdec::config::Config& getConfig();
+		const retdec::config::Config& getConfig() const;
 
 		// Function
 		//
@@ -42,16 +44,16 @@ class Config
 		retdec::utils::Address getFunctionAddress(
 				const llvm::Function* fnc);
 
-		bool isFrontendFunction(const llvm::Value* val);
-		bool isFrontendFunctionCall(const llvm::Value* val);
+		// Intrinsic functions.
+		//
+		using IntrinsicFunctionCreatorPtr = llvm::Function* (*)(llvm::Module*);
+		llvm::Function* getIntrinsicFunction(IntrinsicFunctionCreatorPtr f);
 
 		// Register
 		//
 		const retdec::config::Object* getConfigRegister(
 				const llvm::Value* val);
 		retdec::utils::Maybe<unsigned> getConfigRegisterNumber(
-				const llvm::Value* val);
-		std::string getConfigRegisterClass(
 				const llvm::Value* val);
 		llvm::GlobalVariable* getLlvmRegister(
 				const std::string& name);
@@ -119,13 +121,6 @@ class Config
 				retdec::config::Function* fnc,
 				const std::string& name);
 
-		// LLVM to ASM
-		//
-		bool isLlvmToAsmGlobalVariable(const llvm::Value* gv) const;
-		bool isLlvmToAsmInstruction(const llvm::Value* inst) const;
-		llvm::GlobalVariable* getLlvmToAsmGlobalVariable() const;
-		void setLlvmToAsmGlobalVariable(llvm::GlobalVariable* gv);
-
 		// Pseudo-functions.
 		//
 		void setLlvmCallPseudoFunction(llvm::Function* f);
@@ -151,22 +146,67 @@ class Config
 		llvm::CallInst* isLlvmAnyBranchPseudoFunctionCall(llvm::Value* c);
 		llvm::CallInst* isLlvmAnyUncondBranchPseudoFunctionCall(llvm::Value* c);
 
+		// x86-specific pseudo-functions.
+		//
+		void setLlvmX87DataStorePseudoFunction(llvm::Function* f);
+		llvm::Function* getLlvmX87DataStorePseudoFunction() const;
+		bool isLlvmX87DataStorePseudoFunction(llvm::Value* f);
+		llvm::CallInst* isLlvmX87DataStorePseudoFunctionCall(llvm::Value* c);
+
+		void setLlvmX87TagStorePseudoFunction(llvm::Function* f);
+		llvm::Function* getLlvmX87TagStorePseudoFunction() const;
+		bool isLlvmX87TagStorePseudoFunction(llvm::Value* f);
+		llvm::CallInst* isLlvmX87TagStorePseudoFunctionCall(llvm::Value* c);
+
+		void setLlvmX87DataLoadPseudoFunction(llvm::Function* f);
+		llvm::Function* getLlvmX87DataLoadPseudoFunction() const;
+		bool isLlvmX87DataLoadPseudoFunction(llvm::Value* f);
+		llvm::CallInst* isLlvmX87DataLoadPseudoFunctionCall(llvm::Value* c);
+
+		void setLlvmX87TagLoadPseudoFunction(llvm::Function* f);
+		llvm::Function* getLlvmX87TagLoadPseudoFunction() const;
+		bool isLlvmX87TagLoadPseudoFunction(llvm::Value* f);
+		llvm::CallInst* isLlvmX87TagLoadPseudoFunctionCall(llvm::Value* c);
+
+		llvm::CallInst* isLlvmX87StorePseudoFunctionCall(llvm::Value* c);
+		llvm::CallInst* isLlvmX87LoadPseudoFunctionCall(llvm::Value* c);
+
+		// Assembly pseudo-functions.
+		//
+		void addPseudoAsmFunction(llvm::Function* f);
+		bool isPseudoAsmFunction(llvm::Function* f);
+		llvm::CallInst* isPseudoAsmFunctionCall(llvm::Value* c);
+
 		// Other
 		//
-		bool isPic32() const;
-		bool isMipsOrPic32() const;
 		llvm::GlobalVariable* getGlobalDummy();
+		utils::FilesystemPath getOutputDirectory();
+		bool getCryptoPattern(
+				retdec::utils::Address addr,
+				std::string& name,
+				std::string& description,
+				llvm::Type*& type) const;
+
+	public:
+		llvm::Module* _module = nullptr;
 
 	private:
-		llvm::Module* _module = nullptr;
 		retdec::config::Config _configDB;
 		std::string _configPath;
 		llvm::GlobalVariable* _globalDummy = nullptr;
-		llvm::GlobalVariable* _asm2llvmGv = nullptr;
+
 		llvm::Function* _callFunction = nullptr;
 		llvm::Function* _returnFunction = nullptr;
 		llvm::Function* _branchFunction = nullptr;
 		llvm::Function* _condBranchFunction = nullptr;
+
+		llvm::Function* _x87DataStoreFunction = nullptr; // void (i3, fp80)
+		llvm::Function* _x87TagStoreFunction = nullptr; // void (i3, i2)
+		llvm::Function* _x87DataLoadFunction = nullptr; // fp80 (i3)
+		llvm::Function* _x87TagLoadFunction = nullptr; // i2 (i3)
+
+		std::map<IntrinsicFunctionCreatorPtr, llvm::Function*> _intrinsicFunctions;
+		std::set<llvm::Function*> _pseudoAsmFunctions;
 };
 
 class ConfigProvider

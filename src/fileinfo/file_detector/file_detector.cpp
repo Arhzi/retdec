@@ -137,42 +137,7 @@ void FileDetector::getPdbInfo()
  */
 void FileDetector::getResourceInfo()
 {
-	const auto *resTable = fileParser->getResourceTable();
-	if(!resTable)
-	{
-		return;
-	}
-
-	for(const auto &dRes : *resTable)
-	{
-		Resource res;
-		res.setCrc32(dRes.getCrc32());
-		res.setMd5(dRes.getMd5());
-		res.setSha256(dRes.getSha256());
-		res.setName(dRes.getName());
-		res.setType(dRes.getType());
-		res.setLanguage(dRes.getLanguage());
-		res.setOffset(dRes.getOffset());
-		res.setSize(dRes.getSizeInFile());
-		std::size_t aux;
-		if(dRes.getNameId(aux))
-		{
-			res.setNameId(aux);
-		}
-		if(dRes.getTypeId(aux))
-		{
-			res.setTypeId(aux);
-		}
-		if(dRes.getLanguageId(aux))
-		{
-			res.setLanguageId(aux);
-		}
-		if(dRes.getSublanguageId(aux))
-		{
-			res.setSublanguageId(aux);
-		}
-		fileInfo.addResource(res);
-	}
+	fileInfo.setResourceTable(fileParser->getResourceTable());
 }
 
 /**
@@ -245,8 +210,16 @@ void FileDetector::getCertificates()
 /**
  * Get loader information
  */
+
 void FileDetector::getLoaderInfo()
 {
+	// Propagate loader error no matter if the Image pointer will be created or not
+	auto ldrErrInfo = getFileParser()->getLoaderErrorInfo();
+	if (ldrErrInfo.loaderErrorCode != 0)
+	{
+		fileInfo.setLoaderErrorInfo(ldrErrInfo);
+	}
+
 	std::unique_ptr<retdec::loader::Image> image = retdec::loader::createImage(fileParser);
 	if(!image)
 	{

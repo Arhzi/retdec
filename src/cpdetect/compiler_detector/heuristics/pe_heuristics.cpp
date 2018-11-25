@@ -114,7 +114,6 @@ bool findAutoIt(const std::string &content)
 	return offset != std::string::npos && regex_match(content.substr(offset, 8), regExp);
 }
 
-
 /**
  * Try to find NSIS version in manifest
  * @param manifest PE file manifest
@@ -808,14 +807,15 @@ void PeHeuristics::getNetHeuristic()
 			addPacker(source, strength, "CliSecure");
 		}
 
-		if (std::any_of(dotNetShrinkPatterns.begin(), dotNetShrinkPatterns.end(),
-			[&] (const auto &str)
-			{
-				return this->search.findUnslashedSignature(str, start, end);
-			}
-		))
+		// Note: Before modifying the following loop to std::any_of(),
+		//       please see #231 (compilation bug with GCC 5).
+		for (const auto& str : dotNetShrinkPatterns)
 		{
-			addPacker(source, strength, ".netshrink", "2.01 (demo)");
+			if (search.findUnslashedSignature(str, start, end))
+			{
+				addPacker(source, strength, ".netshrink", "2.01 (demo)");
+				break;
+			}
 		}
 	}
 }
@@ -1212,7 +1212,6 @@ void PeHeuristics::getNullsoftHeuristic()
 		}
 	}
 }
-
 
 /**
  * Search manifest for possible tool clues

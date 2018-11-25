@@ -59,7 +59,7 @@ public:
 	bool hasDataInitializedOnAddress(std::uint64_t address) const;
 	bool hasReadOnlyDataOnAddress(std::uint64_t address) const;
 	bool hasSegmentOnAddress(std::uint64_t address) const;
-	bool isPointer(std::uint64_t address);
+	bool isPointer(std::uint64_t address, std::uint64_t* pointer = nullptr) const;
 
 	Segment* getSegment(std::size_t index);
 	Segment* getSegment(const std::string& name);
@@ -71,7 +71,10 @@ public:
 	const Segment* getSegmentFromAddress(std::uint64_t address) const;
 	const Segment* getEpSegment();
 
+	std::pair<const std::uint8_t*, std::uint64_t> getRawSegmentData(std::uint64_t address) const;
+
 	const std::string& getStatusMessage() const;
+	const retdec::fileformat::LoaderErrorInfo & getLoaderErrorInfo() const;
 
 protected:
 	Segment* insertSegment(std::unique_ptr<Segment> segment);

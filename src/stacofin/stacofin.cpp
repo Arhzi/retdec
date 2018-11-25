@@ -1,9 +1,8 @@
 /**
- * @file patterns/stacofinl/stacofinl.cpp
+ * @file src/stacofin/stacofin.cpp
  * @brief Static code finder library.
  * @copyright (c) 2017 Avast Software, licensed under the MIT license
  */
-
 
 #include <iostream>
 #include <sstream>
@@ -19,7 +18,6 @@ using namespace retdec::loader;
 
 namespace retdec {
 namespace stacofin {
-
 
 /**
  * Parse string with references from meta attribute.
@@ -43,7 +41,6 @@ void DetectedFunction::setReferences(const std::string &refsString)
 	}
 }
 
-
 /**
  * Default constructor.
  */
@@ -51,14 +48,12 @@ Finder::Finder()
 {
 }
 
-
 /**
  * Default destructor.
  */
 Finder::~Finder()
 {
 }
-
 
 /**
  * Clear all previous results.
@@ -68,7 +63,6 @@ void Finder::clear()
 	coveredCode.clear();
 	detectedFunctions.clear();
 }
-
 
 /**
  * Search for static code in input file.
@@ -142,7 +136,6 @@ void Finder::search(
 	}
 }
 
-
 /**
  * Return detected code coverage.
  *
@@ -152,7 +145,6 @@ CoveredCode Finder::getCoveredCode()
 {
 	return coveredCode;
 }
-
 
 /**
  * Return detected functions sorted by their address.
@@ -165,7 +157,6 @@ std::vector<DetectedFunction> Finder::getDectedFunctions()
 	return detectedFunctions;
 }
 
-
 /**
  * Return detected functions sorted by their address.
  *
@@ -177,12 +168,11 @@ const std::vector<DetectedFunction>& Finder::accessDectedFunctions()
 	return detectedFunctions;
 }
 
-
 /**
  * Sort detected functions.
  *
  * Functions are sorted by their address, if detection address is same bigger
- * detection is frist.
+ * detection is first.
  */
 void Finder::sort()
 {

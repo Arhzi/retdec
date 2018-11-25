@@ -12,8 +12,8 @@ namespace cpdetect {
 /**
  * Constructor of DetectParams structure
  */
-DetectParams::DetectParams(SearchType searchType_, bool internal_, bool external_) :
-		searchType(searchType_), internal(internal_), external(external_)
+DetectParams::DetectParams(SearchType searchType_, bool internal_, bool external_, std::size_t epBytesCount_) :
+		searchType(searchType_), internal(internal_), external(external_), epBytesCount(epBytesCount_)
 {
 
 }
@@ -302,7 +302,6 @@ Packed ToolInformation::isPacked() const
 	}
 }
 
-
 /**
  * Constructor of Similarity structure
  */
@@ -362,6 +361,9 @@ std::string detectionMetodToString(DetectionMethod method)
 
 		case DetectionMethod::COMMENT_H:
 			return ".comment section heuristic";
+
+		case DetectionMethod::NOTE_H:
+			return ".note section heuristic";
 
 		case DetectionMethod::MANIFEST_H:
 			return "manifest heuristic";

@@ -8,6 +8,8 @@
 
 #=====================================================================================
 
+from __future__ import print_function
+
 import sys
 import re
 
@@ -20,6 +22,10 @@ from pygments.token import Token
 
 import json
 from pprint import pprint
+
+import importlib
+utils = importlib.import_module('retdec-utils')
+utils.check_python_version()
 
 #=====================================================================================
 
@@ -101,7 +107,6 @@ TERMINAL_COLORS = {
 	Token.Comment:            SCOLOR_AUTOCMT,
 	Token.Comment.Preproc:    SCOLOR_AUTOCMT,
 	Token.Keyword:            SCOLOR_MACRO,
-#	Token.Keyword.Type:       SCOLOR_KEYWORD,
     Token.Keyword.Type:       SCOLOR_AUTOCMT,
 
 	Token.String:             SCOLOR_NUMBER,   # SCOLOR_CREFTAIL,

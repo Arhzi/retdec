@@ -11,10 +11,22 @@ endif()
 option(RETDEC_DOC "Build public API documentation (requires Doxygen)." OFF)
 option(RETDEC_TESTS "Build tests." OFF)
 option(RETDEC_DEV_TOOLS "Build dev tools." OFF)
+option(RETDEC_FORCE_OPENSSL_BUILD "Force OpenSSL build." OFF)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+# RetDec, and some dependencies (e.g. LLVM, Keystone), require Python 3.
+find_package(PythonInterp 3.4 REQUIRED)
+
+function(append_if condition value)
+	if (${condition})
+		foreach(variable ${ARGN})
+			set(${variable} "${${variable}} ${value}" PARENT_SCOPE)
+		endforeach(variable)
+	endif()
+endfunction()
 
 # On Linux and macOS, set RPATH relative to the origin of the installed
 # executables (i.e. relative to the bin directory). This allows us to move the
@@ -32,6 +44,14 @@ if(APPLE)
 	set(CMAKE_INSTALL_RPATH "@executable_path/../lib")
 elseif(UNIX)
 	set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
+endif()
+
+# Suppress superfluous randlib warnings about "*.a" having no symbols on MacOSX.
+if (APPLE)
+	set(CMAKE_C_ARCHIVE_CREATE   "<CMAKE_AR> Scr <TARGET> <LINK_FLAGS> <OBJECTS>")
+	set(CMAKE_CXX_ARCHIVE_CREATE "<CMAKE_AR> Scr <TARGET> <LINK_FLAGS> <OBJECTS>")
+	set(CMAKE_C_ARCHIVE_FINISH   "<CMAKE_RANLIB> -no_warning_for_no_symbols -c <TARGET>")
+	set(CMAKE_CXX_ARCHIVE_FINISH "<CMAKE_RANLIB> -no_warning_for_no_symbols -c <TARGET>")
 endif()
 
 # Build all external projects in the same directory that is directly inside the
@@ -54,6 +74,12 @@ if(MSVC)
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR
 		CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR
 		CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+	# Unify visibility to meet LLVM's default.
+	include(CheckCXXCompilerFlag)
+
+	check_cxx_compiler_flag("-fvisibility-inlines-hidden" SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)
+	append_if(SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG "-fvisibility-inlines-hidden" CMAKE_CXX_FLAGS)
+
 	# Enable standard warnings.
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
 

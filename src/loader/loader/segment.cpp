@@ -54,7 +54,7 @@ std::uint64_t Segment::getAddress() const
  */
 std::uint64_t Segment::getEndAddress() const
 {
-	return getSize() ? getAddress() + getSize() - 1 : getAddress();
+	return getSize() ? getAddress() + getSize() : getAddress() + 1;
 }
 
 /**
@@ -64,7 +64,7 @@ std::uint64_t Segment::getEndAddress() const
  */
 std::uint64_t Segment::getPhysicalEndAddress() const
 {
-	return getPhysicalSize() ? getAddress() + getPhysicalSize() - 1 : getAddress();
+	return getPhysicalSize() ? getAddress() + getPhysicalSize() : getAddress() + 1;
 }
 
 /**
@@ -119,6 +119,17 @@ const retdec::utils::RangeContainer<std::uint64_t>& Segment::getNonDecodableAddr
 }
 
 /**
+ * Returns the raw data of the segment in its size. Returns null pointer and 0 for segments
+ * without any source of phyiscal data.
+ *
+ * @return Raw data pointer and size.
+ */
+std::pair<const std::uint8_t*, std::uint64_t> Segment::getRawData() const
+{
+	return _dataSource ? std::make_pair(_dataSource->getData(), getPhysicalSize()) : std::make_pair(nullptr, 0) ;
+}
+
+/**
  * Returns whether the segment is named segment.
  *
  * @return True if set, otherwise false.
@@ -157,7 +168,7 @@ void Segment::setName(const std::string& name)
  */
 bool Segment::containsAddress(std::uint64_t address) const
 {
-	return ((getAddress() <= address) && (address <= getEndAddress()));
+	return ((getAddress() <= address) && (address < getEndAddress()));
 }
 
 /**
@@ -292,11 +303,13 @@ void Segment::shrink(std::uint64_t newAddress, std::uint64_t newSize)
  */
 void Segment::addNonDecodableRange(retdec::utils::Range<std::uint64_t> range)
 {
-	if (!range.contains(getAddress()) && !range.contains(getEndAddress()))
+	retdec::utils::Range<std::uint64_t> secRange(getAddress(), getPhysicalEndAddress());
+	if (!secRange.overlaps(range))
 		return;
 
-	range.setStart(std::max(range.getStart(), getAddress()));
-	range.setEnd(std::min(range.getEnd(), getPhysicalEndAddress()));
+	range.setStartEnd(
+			std::max(range.getStart(), secRange.getStart()),
+			std::min(range.getEnd(), secRange.getEnd()));
 
 	_nonDecodableRanges.addRange(std::move(range));
 }

@@ -7,6 +7,7 @@
 #include "retdec/utils/conversion.h"
 #include "retdec/patterngen/pattern_extractor/pattern_extractor.h"
 #include "retdec/fileformat/file_format/elf/elf_format.h"
+#include "retdec/fileformat/file_format/macho/macho_format.h"
 #include "retdec/fileformat/file_format/file_format.h"
 #include "retdec/fileformat/format_factory.h"
 #include "retdec/fileformat/types/symbol_table/elf_symbol.h"
@@ -75,7 +76,6 @@ bool PatternExtractor::isPic32DataObjectOnlyFile()
 	return true;
 }
 
-
 /**
  * Process PIC32 DATA OBJECT only file.
  */
@@ -106,7 +106,6 @@ void PatternExtractor::processPic32DataObjectOnly()
 		}
 	}
 
-
 	// Filter symbols on same address.
 	auto newEnd = std::unique(functionLabels.begin(), functionLabels.end(),
 		[](auto* f, auto* o) {
@@ -131,7 +130,6 @@ void PatternExtractor::processPic32DataObjectOnly()
 	addSectionPatterns(codeSec, functionLabels);
 }
 
-
 /**
  * Process loaded file.
  */
@@ -140,6 +138,13 @@ bool PatternExtractor::processFile()
 	if (!inputFile) {
 		errorMessage = "not supported file format or damaged input file";
 		return false;
+	}
+
+	if (auto* macho = dynamic_cast<MachOFormat*>(inputFile.get())) {
+		if (macho->isFatBinary()) {
+			errorMessage = "fat Mach-O binary - use retdec-macho-extractor";
+			return false;
+		}
 	}
 
 	if (!inputFile->isObjectFile()) {
@@ -190,7 +195,6 @@ bool PatternExtractor::processFile()
 	return true;
 }
 
-
 /**
  * Check if we can use this 64-bit PowerPC file.
  *
@@ -204,22 +208,21 @@ bool PatternExtractor::processFile()
 bool PatternExtractor::checkPPC64Sections()
 {
 	// Check if there is a '.opd' section and multiple code sections.
-	if (const auto section = inputFile->getSection(".opd")) {
-		std::size_t countrer = 0;
+	if (inputFile->getSection(".opd")) {
+		std::size_t counter = 0;
 		for (const Section *section : inputFile->getSections()) {
 			if (section->isCode()) {
-				countrer++;
+				counter++;
 			}
 		}
 
 		// There can be only one code section if '.opd' is used.
-		return countrer == 1;
+		return counter == 1;
 	}
 
 	// No '.opd' section.
 	return true;
 }
-
 
 /**
  * Filter symbols so that only first symbol for given address is used.
@@ -390,7 +393,6 @@ void PatternExtractor::processSection(const Section *section)
 	addSectionPatterns(section, symbols);
 }
 
-
 /**
  * Add new patterns.
  *
@@ -432,7 +434,6 @@ void PatternExtractor::addSectionPatterns(
 			endAddress - startAddress);
 	}
 }
-
 
 /**
  * Creates and stores one pattern from given symbol information.

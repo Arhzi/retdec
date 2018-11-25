@@ -17,16 +17,6 @@ namespace retdec {
 namespace demangler {
 
 /**
- * @brief Function which finds out whether a file exists.
- * @param filename Name of the file to be checked.
- * @return Boolean value determining whether the file exists or not.
- */
-bool fileExists(const std::string &filename) {
-	ifstream ifile(filename);
-	return ifile.is_open();
-}
-
-/**
  * @brief Initializes a sdate_t to default values.
  * @param x sdate_t to be initialized..
  */
@@ -69,7 +59,7 @@ sdate_t genTimeStruct() {
  * @param tobereplaced Substring which will be searched for and all of its instances will be replaced.
  * @param replacement The replacement string.
  */
-void xreplace(string &source, const string &tobereplaced, const string &replacement) {
+void xreplace(std::string &source, const std::string &tobereplaced, const std::string &replacement) {
 	std::size_t lastfound = 0;
 	if (tobereplaced != "") {
 		while (source.find(tobereplaced,lastfound) != source.npos) {

@@ -10,9 +10,11 @@
 #include <llvm/Support/ErrorHandling.h>
 
 #include "retdec/utils/conversion.h"
+#include "retdec/utils/memory.h"
 #include "retdec/utils/string.h"
 #include "retdec/ar-extractor/detection.h"
 #include "retdec/cpdetect/errors.h"
+#include "retdec/cpdetect/settings.h"
 #include "retdec/fileformat/utils/format_detection.h"
 #include "retdec/fileformat/utils/other.h"
 #include "fileinfo/file_detector/detector_factory.h"
@@ -48,6 +50,9 @@ struct ProgParams
 	std::set<std::string> yaraMalwarePaths; ///< paths to YARA malware rules
 	std::set<std::string> yaraCryptoPaths;  ///< paths to YARA crypto rules
 	std::set<std::string> yaraOtherPaths;   ///< paths to YARA other rules
+	std::size_t maxMemory;                  ///< maximal memory
+	bool maxMemoryHalfRAM;                  ///< limit maximal memory to half of system RAM
+	std::size_t epBytesCount;               ///< number of bytes to load from entry point
 	LoadFlags loadFlags;                    ///< load flags for `fileformat`
 
 	ProgParams() : searchMode(SearchType::EXACT_MATCH),
@@ -57,6 +62,9 @@ struct ProgParams
 					verbose(false),
 					explanatory(false),
 					generateConfigFile(false),
+					maxMemory(0),
+					maxMemoryHalfRAM(false),
+					epBytesCount(EP_BYTES_SIZE),
 					loadFlags(LoadFlags::NONE) {}
 };
 
@@ -81,9 +89,6 @@ void fatalErrorHandler(void *user_data, const std::string& /*reason*/, bool /*ge
 	FileInformation *fileinfo = static_cast<ErrorHandlerInfo*>(user_data)->fileinfo;
 
 	fileinfo->setStatus(ReturnCode::FORMAT_PARSER_PROBLEM);
-
-	//auto message = "Error: " + reason;
-	//fileinfo->messages.push_back(message);
 
 	if(params->plainText)
 	{
@@ -145,20 +150,29 @@ void printHelp()
 				<< "    --plain, -p           Print output as plain text.\n"
 				<< "    --json, -j            Print output in JSON format.\n"
 				<< "\n"
+				<< "Options for specifying properties to load from the file:\n"
+				<< "    --strings, -S         Load strings in the input file and print them.\n"
+				<< "    --no-hashes[=all|file|verbose]\n"
+				<< "                          Do not print and calculate hashes.\n"
+				<< "                          Either all hashes or only file/verbose hashes.\n"
+				<< "                          All assumed if no argument specified.\n"
+				<< "    --ep-bytes=N          Number of bytes to load from entry point. (Default: " << EP_BYTES_SIZE << ")\n"
+				<< "\n"
 				<< "Other options for specifying output:\n"
 				<< "    --verbose, -v         Print more information about input file.\n"
 				<< "                          Without this parameter program print only\n"
 				<< "                          basic information.\n"
 				<< "    --explanatory, -X     Print explanatory notes (only in plain text output).\n"
-				<< "    --strings, -S         Print information about strings.\n"
-				<< "    --no-hashes[=all|file|verbose]\n"
-				<< "                          Do not print and calculate hashes.\n"
-				<< "                          Either all hashes or only file/verbose hashes.\n"
-				<< "                          All assumed if no argument specified.\n"
 				<< "\n"
 				<< "Options for specifying configuration file:\n"
 				<< "    --config=file, -c=file\n"
-				<< "                          Set path and name of the config which will be (re)generated.\n";
+				<< "                          Set path and name of the config which will be (re)generated.\n"
+				<< "\n"
+				<< "Options for limiting maximal memory:\n"
+				<< "    --max-memory=N\n"
+				<< "                          Limit maximal memory to N bytes (0 means no limit).\n"
+				<< "    --max-memory-half-ram\n"
+				<< "                          Limit maximal memory to half of system RAM.\n";
 }
 
 std::string getParamOrDie(std::vector<std::string> &argv, std::size_t &i)
@@ -197,7 +211,7 @@ bool doParams(int argc, char **_argv, ProgParams &params)
 	std::vector<std::string> argv;
 
 	std::set<std::string> withArgs = {"malware", "m", "crypto", "C", "other",
-			"o", "config", "c", "no-hashes"};
+			"o", "config", "c", "no-hashes", "max-memory", "ep-bytes"};
 	for (int i = 1; i < argc; ++i)
 	{
 		std::string a = _argv[i];
@@ -289,6 +303,18 @@ bool doParams(int argc, char **_argv, ProgParams &params)
 		{
 			params.yaraOtherPaths.insert(getParamOrDie(argv, i));
 		}
+		else if (c == "--max-memory")
+		{
+			auto maxMemoryString = getParamOrDie(argv, i);
+			auto conversionSucceeded = strToNum(maxMemoryString, params.maxMemory);
+			if (!conversionSucceeded) {
+				return false;
+			}
+		}
+		else if (c == "--max-memory-half-ram")
+		{
+			params.maxMemoryHalfRAM = true;
+		}
 		else if (c == "--no-hashes")
 		{
 			std::string value;
@@ -321,6 +347,12 @@ bool doParams(int argc, char **_argv, ProgParams &params)
 				}
 			}
 		}
+		else if (c == "--ep-bytes")
+		{
+			auto epBytesCountString = getParamOrDie(argv, i);
+			if (!strToNum(epBytesCountString, params.epBytesCount))
+				return false;
+		}
 		else if (params.filePath.empty())
 		{
 			params.filePath = argv[i];
@@ -337,6 +369,24 @@ bool doParams(int argc, char **_argv, ProgParams &params)
 	}
 
 	return true;
+}
+
+/**
+* Limits the maximal memory of the tool based on the command-line parameters.
+*/
+void limitMaximalMemoryIfRequested(const ProgParams& params)
+{
+	// Ignore errors as there is no easy way of reporting them at this
+	// point (in a way that would work both with --plain and --json).
+	// We have at least regression tests for this.
+	if(params.maxMemoryHalfRAM)
+	{
+		limitSystemMemoryToHalfOfTotalSystemMemory();
+	}
+	else if(params.maxMemory > 0)
+	{
+		limitSystemMemory(params.maxMemory);
+	}
 }
 
 } // anonymous namespace
@@ -357,6 +407,8 @@ int main(int argc, char* argv[])
 		return static_cast<int>(ReturnCode::ARG);
 	}
 
+	limitMaximalMemoryIfRequested(params);
+
 	bool useConfig = true;
 	retdec::config::Config config;
 	if(params.generateConfigFile && !params.configFile.empty())
@@ -375,7 +427,7 @@ int main(int argc, char* argv[])
 		}
 	}
 
-	DetectParams searchPar(params.searchMode, params.internalDatabase, params.externalDatabase);
+	DetectParams searchPar(params.searchMode, params.internalDatabase, params.externalDatabase, params.epBytesCount);
 	const auto fileFormat = detectFileFormat(params.filePath, useConfig ? &config : nullptr);
 	FileInformation fileinfo;
 	FileDetector *fileDetector = nullptr;
