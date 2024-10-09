@@ -44,10 +44,11 @@ using UseVector = std::vector<Use>;
 class Definition
 {
 	public:
-		Definition(llvm::Instruction* d, llvm::Value* s);
+		Definition(llvm::Instruction* d, llvm::Value* s, unsigned bbPos);
 		bool operator==(const Definition& o) const;
 
 		llvm::Value* getSource();
+		bool dominates(const Use* use) const;
 
 	public:
 		/// Definition instruction -- store or alloca.
@@ -55,12 +56,15 @@ class Definition
 		/// Defined value -- store's pointer operand or alloca itself.
 		llvm::Value* src;
 		UseSet uses;
+		/// Definition instruction position in its BB.
+		/// Can be used to find out if def dominates its uses in the same BB.
+		unsigned posInBb = 0;
 };
 
 class Use
 {
 	public:
-		Use(llvm::Instruction* u, llvm::Value* s);
+		Use(llvm::Instruction* u, llvm::Value* s, unsigned bbPos);
 		bool operator==(const Use &o) const;
 
 		bool isUndef() const;
@@ -71,12 +75,15 @@ class Use
 		/// Used value -- load's pointer operand, call's argument operand.
 		llvm::Value* src;
 		DefSet defs;
+		/// Definition instruction position in its BB.
+		/// Can be used to find out if def dominates its uses in the same BB.
+		unsigned posInBb = 0;
 };
 
 class BasicBlockEntry
 {
 	public:
-		BasicBlockEntry(const llvm::BasicBlock* b = nullptr);
+		BasicBlockEntry(const llvm::BasicBlock* b = nullptr, std::size_t _id = 0);
 
 		std::string getName() const;
 		friend std::ostream& operator<<(
@@ -108,7 +115,6 @@ class BasicBlockEntry
 
 	private:
 		unsigned id;
-	    static int newUID;
 };
 
 class ReachingDefinitionsAnalysis

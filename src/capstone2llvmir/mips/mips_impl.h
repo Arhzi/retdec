@@ -22,7 +22,6 @@ class Capstone2LlvmIrTranslatorMips_impl :
 				llvm::Module* m,
 				cs_mode basic = CS_MODE_MIPS32,
 				cs_mode extra = CS_MODE_LITTLE_ENDIAN);
-		virtual ~Capstone2LlvmIrTranslatorMips_impl();
 //
 //==============================================================================
 // Mode query & modification methods - from Capstone2LlvmIrTranslator.
@@ -87,12 +86,12 @@ class Capstone2LlvmIrTranslatorMips_impl :
 				uint32_t r,
 				llvm::Value* val,
 				llvm::IRBuilder<>& irb,
-				eOpConv ct = eOpConv::SEXT_TRUNC) override;
+				eOpConv ct = eOpConv::SEXT_TRUNC_OR_BITCAST) override;
 		virtual llvm::Instruction* storeOp(
 				cs_mips_op& op,
 				llvm::Value* val,
 				llvm::IRBuilder<>& irb,
-				eOpConv ct = eOpConv::SEXT_TRUNC) override;
+				eOpConv ct = eOpConv::SEXT_TRUNC_OR_BITCAST) override;
 
 		llvm::StoreInst* storeRegisterUnpredictable(
 				uint32_t r,
@@ -100,6 +99,7 @@ class Capstone2LlvmIrTranslatorMips_impl :
 		bool isFpInstructionVariant(cs_insn* i);
 
 		virtual bool isOperandRegister(cs_mips_op& op) override;
+		bool isGeneralPurposeRegister(uint32_t r);
 //
 //==============================================================================
 // MIPS implementation data.
@@ -156,18 +156,22 @@ class Capstone2LlvmIrTranslatorMips_impl :
 		void translateMovz(cs_insn* i, cs_mips* mi, llvm::IRBuilder<>& irb);
 		void translateMul(cs_insn* i, cs_mips* mi, llvm::IRBuilder<>& irb);
 		void translateMult(cs_insn* i, cs_mips* mi, llvm::IRBuilder<>& irb);
+		void translateNeg(cs_insn* i, cs_mips* mi, llvm::IRBuilder<>& irb);
 		void translateNegu(cs_insn* i, cs_mips* mi, llvm::IRBuilder<>& irb);
 		void translateNmadd(cs_insn* i, cs_mips* mi, llvm::IRBuilder<>& irb);
 		void translateNmsub(cs_insn* i, cs_mips* mi, llvm::IRBuilder<>& irb);
 		void translateNop(cs_insn* i, cs_mips* mi, llvm::IRBuilder<>& irb);
 		void translateNor(cs_insn* i, cs_mips* mi, llvm::IRBuilder<>& irb);
+		void translateNot(cs_insn* i, cs_mips* mi, llvm::IRBuilder<>& irb);
 		void translateOr(cs_insn* i, cs_mips* mi, llvm::IRBuilder<>& irb);
 		void translateRotr(cs_insn* i, cs_mips* mi, llvm::IRBuilder<>& irb);
 		void translateSeb(cs_insn* i, cs_mips* mi, llvm::IRBuilder<>& irb);
 		void translateSeh(cs_insn* i, cs_mips* mi, llvm::IRBuilder<>& irb);
+		void translateSeq(cs_insn* i, cs_mips* mi, llvm::IRBuilder<>& irb);
 		void translateSll(cs_insn* i, cs_mips* mi, llvm::IRBuilder<>& irb);
 		void translateSlt(cs_insn* i, cs_mips* mi, llvm::IRBuilder<>& irb);
 		void translateSltu(cs_insn* i, cs_mips* mi, llvm::IRBuilder<>& irb);
+		void translateSne(cs_insn* i, cs_mips* mi, llvm::IRBuilder<>& irb);
 		void translateSra(cs_insn* i, cs_mips* mi, llvm::IRBuilder<>& irb);
 		void translateSrl(cs_insn* i, cs_mips* mi, llvm::IRBuilder<>& irb);
 		void translateStoreMemory(cs_insn* i, cs_mips* mi, llvm::IRBuilder<>& irb);

@@ -10,6 +10,7 @@
 using namespace retdec::cpdetect;
 using namespace retdec::fileformat;
 
+namespace retdec {
 namespace fileinfo {
 
 /**
@@ -19,20 +20,15 @@ namespace fileinfo {
  * @param searchPar Parameters for detection of used compiler (or packer)
  * @param loadFlags Load flags
  */
-IntelHexDetector::IntelHexDetector(std::string pathToInputFile, FileInformation &finfo,
-	retdec::cpdetect::DetectParams &searchPar, retdec::fileformat::LoadFlags loadFlags) :
-	FileDetector(pathToInputFile, finfo, searchPar, loadFlags)
+IntelHexDetector::IntelHexDetector(
+		std::string pathToInputFile,
+		FileInformation &finfo,
+		retdec::cpdetect::DetectParams &searchPar,
+		retdec::fileformat::LoadFlags loadFlags)
+		: FileDetector(pathToInputFile, finfo, searchPar, loadFlags)
 {
 	fileParser = ihexParser = std::make_shared<IntelHexFormat>(fileInfo.getPathToFile(), loadFlags);
 	loaded = fileParser->isInValidState();
-}
-
-/**
- * Destructor
- */
-IntelHexDetector::~IntelHexDetector()
-{
-
 }
 
 /**
@@ -126,7 +122,7 @@ void IntelHexDetector::detectFileType()
 
 void IntelHexDetector::getAdditionalInfo()
 {
-	unsigned long long ep = 0;
+	std::uint64_t ep = 0;
 	if(fileParser->getEpAddress(ep))
 	{
 		fileInfo.toolInfo.epAddress = ep;
@@ -142,7 +138,8 @@ void IntelHexDetector::getAdditionalInfo()
  */
 retdec::cpdetect::CompilerDetector* IntelHexDetector::createCompilerDetector() const
 {
-	return new IntelHexCompiler(*ihexParser, cpParams, fileInfo.toolInfo);
+	return new CompilerDetector(*ihexParser, cpParams, fileInfo.toolInfo);
 }
 
 } // namespace fileinfo
+} // namespace retdec

@@ -10,8 +10,11 @@
 #include <unordered_set>
 
 #include "unpackertool/plugins/upx/upx_stub.h"
-#include "retdec/unpacker/dynamic_buffer.h"
+#include "retdec/pelib/PeFile.h"
+#include "retdec/utils/dynamic_buffer.h"
 #include "retdec/unpacker/signature.h"
+
+using namespace retdec::utils;
 
 namespace retdec {
 namespace unpackertool {
@@ -35,7 +38,7 @@ class UpxExtraData
 public:
 	UpxExtraData() : _importsOffset(0), _relocsOffset(0), _originalHeaderOffset(0), _relocsBigEndian(false) {}
 	UpxExtraData(const UpxExtraData& extraData)
-		: _importsOffset(extraData._importsOffset), _relocsOffset(extraData._relocsOffset), _relocsBigEndian(extraData._relocsBigEndian) {}
+		: _importsOffset(extraData._importsOffset), _relocsOffset(extraData._relocsOffset), _originalHeaderOffset(extraData._originalHeaderOffset), _relocsBigEndian(extraData._relocsBigEndian) {}
 
 	std::uint32_t getImportsOffset() const { return _importsOffset; }
 	void setImportsOffset(std::uint32_t importsOffset) { _importsOffset = importsOffset; }
@@ -56,69 +59,20 @@ private:
 };
 
 /**
- * Base PE UPX traits structure.
- */
-template <int /*bits*/> struct PeUpxStubTraits {};
-
-/**
- * Specialized traits for PE32.
- */
-template <> struct PeUpxStubTraits<32>
-{
-	using AddressType = std::uint32_t; ///< Type with default word size.
-	using PeLibFileType = PeLib::PeFile32;
-
-	static const std::uint16_t HeaderMagic = PeLib::PELIB_IMAGE_NT_OPTIONAL_HDR32_MAGIC; ///< PE magic header.
-	static const std::uint32_t NumberOfRvaAndSizesOffset = 0x74; ///< Offset in PE header to directories count.
-	static const std::uint32_t TlsDirectoryRvaOffset = 0xC0; ///< Offset to TLS RVA.
-	static const std::uint32_t TlsDirectorySizeOffset = 0xC4; ///< Offset to TLS size.
-	static const std::uint32_t ExportsDirectoryRvaOffset = 0x78; ///< Offset to exports RVA.
-	static const std::uint32_t ExportsDirectorySizeOffset = 0x7C; ///< Offset to exports size.
-	static const std::uint32_t LoadConfigDirectoryRvaOffset = 0xC8; ///< Offset to load configuration RVA.
-	static const std::uint32_t LoadConfigDirectorySizeOffset = 0xCC; ///< Offset to load configuration size.
-	static const std::uint32_t RsrcsDirectoryRvaOffset = 0x88; ///< Offset to resources RVA.
-	static const std::uint32_t RsrcsDirectorySizeOffset = 0x8C; ///< Offset to resources size.
-};
-
-/**
- * Specialized traits for PE32+.
- */
-template <> struct PeUpxStubTraits<64>
-{
-	using AddressType = std::uint32_t; ///< Type with default word size.
-	using PeLibFileType = PeLib::PeFile64; ///< Type of PE file.
-
-	static const std::uint16_t HeaderMagic = PeLib::PELIB_IMAGE_NT_OPTIONAL_HDR64_MAGIC; ///< PE magic header.
-	static const std::uint32_t NumberOfRvaAndSizesOffset = 0x84; ///< Offset in PE header to directories count.
-	static const std::uint32_t TlsDirectoryRvaOffset = 0xD0; ///< Offset to TLS RVA.
-	static const std::uint32_t TlsDirectorySizeOffset = 0xD4; ///< Offset to TLS size.
-	static const std::uint32_t ExportsDirectoryRvaOffset = 0x88; ///< Offset to exports RVA.
-	static const std::uint32_t ExportsDirectorySizeOffset = 0x8C; ///< Offset to exports size.
-	static const std::uint32_t LoadConfigDirectoryRvaOffset = 0xD8; ///< Offset to load configuration RVA.
-	static const std::uint32_t LoadConfigDirectorySizeOffset = 0xDC; ///< Offset to load configuration size.
-	static const std::uint32_t RsrcsDirectoryRvaOffset = 0x98; ///< Offset to resources RVA.
-	static const std::uint32_t RsrcsDirectorySizeOffset = 0x9C; ///< Offset to resources size.
-};
-
-/**
  * Basic unpacking stub class for unpacking files in PE format.
  */
 template <int bits> class PeUpxStub : public UpxStub
 {
-	using AddressType = typename PeUpxStubTraits<bits>::AddressType;
-	using PeLibFileType = typename PeUpxStubTraits<bits>::PeLibFileType;
+	public:
 
-public:
-	PeUpxStub(retdec::loader::Image* inputFile, const UpxStubData* stubData, const retdec::unpacker::DynamicBuffer& stubCapturedData,
+	PeUpxStub(retdec::loader::Image* inputFile, const UpxStubData* stubData, const DynamicBuffer& stubCapturedData,
 			std::unique_ptr<Decompressor> decompressor, const UpxMetadata& metadata);
-
-	virtual ~PeUpxStub() override;
 
 	virtual void unpack(const std::string& ouputFile) override;
 	virtual void setupPackingMethod(std::uint8_t packingMethod);
-	virtual void readUnpackingStub(retdec::unpacker::DynamicBuffer& unpackingStub);
-	virtual void readPackedData(retdec::unpacker::DynamicBuffer& packedData, bool trustMetadata);
-	virtual void decompress(retdec::unpacker::DynamicBuffer& packedData, retdec::unpacker::DynamicBuffer& unpackedData, bool trustMetadata);
+	virtual void readUnpackingStub(DynamicBuffer& unpackingStub);
+	virtual void readPackedData(DynamicBuffer& packedData, bool trustMetadata);
+	virtual void decompress(DynamicBuffer& packedData, DynamicBuffer& unpackedData, bool trustMetadata);
 	virtual void cleanup() override;
 
 	virtual std::uint32_t getRealEpAddress() const override;
@@ -130,31 +84,31 @@ protected:
 
 private:
 	void prepare();
-	void detectUnfilter(const retdec::unpacker::DynamicBuffer& unpackingStub);
-	void unpackData(retdec::unpacker::DynamicBuffer& unpackedData);
-	void readPackedFileILT(retdec::unpacker::DynamicBuffer& ilt);
-	void fixSizeOfSections(const retdec::unpacker::DynamicBuffer& unpackedData);
-	UpxExtraData parseExtraData(retdec::unpacker::DynamicBuffer& unpackedData, retdec::unpacker::DynamicBuffer& originalHeader);
-	void fixPeHeader(const retdec::unpacker::DynamicBuffer& originalHeader);
-	void unfilterData(retdec::unpacker::DynamicBuffer& unpackedData);
-	void fixImports(const retdec::unpacker::DynamicBuffer& unpackedData, const UpxExtraData& extraData, const retdec::unpacker::DynamicBuffer& ilt);
-	void fixRelocations(retdec::unpacker::DynamicBuffer& unpackedData, const UpxExtraData& extraData);
-	void fixTls(const retdec::unpacker::DynamicBuffer& originalHeader);
-	void fixOep(const retdec::unpacker::DynamicBuffer& originalHeader);
-	void fixExports(const retdec::unpacker::DynamicBuffer& originalHeader);
-	void fixLoadConfiguration(const retdec::unpacker::DynamicBuffer& originalHeader);
-	void fixResources(const retdec::unpacker::DynamicBuffer& unpackedData, const retdec::unpacker::DynamicBuffer& originalHeader);
-	void fixSectionHeaders(const retdec::unpacker::DynamicBuffer& originalHeader);
+	void detectUnfilter(const DynamicBuffer& unpackingStub);
+	void unpackData(DynamicBuffer& unpackedData);
+	void readPackedFileILT(DynamicBuffer& ilt);
+	void fixSizeOfSections(const DynamicBuffer& unpackedData);
+	UpxExtraData parseExtraData(DynamicBuffer& unpackedData, DynamicBuffer& originalHeader);
+	void fixPeHeader(const DynamicBuffer& originalHeader);
+	void unfilterData(DynamicBuffer& unpackedData);
+	void fixImports(const DynamicBuffer& unpackedData, const UpxExtraData& extraData, const DynamicBuffer& ilt);
+	void fixRelocations(DynamicBuffer& unpackedData, const UpxExtraData& extraData);
+	void fixTls(const DynamicBuffer& originalHeader);
+	void fixOep(const DynamicBuffer& originalHeader);
+	void fixExports(const DynamicBuffer& originalHeader);
+	void fixLoadConfiguration(const DynamicBuffer& originalHeader);
+	void fixResources(const DynamicBuffer& unpackedData, const DynamicBuffer& originalHeader);
+	void fixSectionHeaders(const DynamicBuffer& originalHeader);
 	void fixCoffSymbolTable();
 	void fixCertificates();
-	void cutHintsData(retdec::unpacker::DynamicBuffer& unpackedData, const UpxExtraData& extraData);
-	void saveFile(const std::string& outputFile, retdec::unpacker::DynamicBuffer& unpackedData);
+	void cutHintsData(DynamicBuffer& unpackedData, const UpxExtraData& extraData);
+	void saveFile(const std::string& outputFile, DynamicBuffer& unpackedData);
 
 	void loadResources(PeLib::ResourceNode* rootNode, std::uint32_t offset, std::uint32_t uncompressedRsrcRva, std::uint32_t compressedRsrcRva,
-			const retdec::unpacker::DynamicBuffer& uncompressedRsrcs, const retdec::unpacker::DynamicBuffer& unpackedData, std::unordered_set<std::uint32_t>& visitedNodes);
+			const DynamicBuffer& uncompressedRsrcs, const DynamicBuffer& unpackedData, std::unordered_set<std::uint32_t>& visitedNodes);
 	std::uint8_t getPackingMethod(bool trustMetadata) const;
 
-	PeLibFileType* _newPeFile;      ///< Unpacked output file.
+	PeLib::PeFileT * _newPeFile;    ///< Unpacked output file.
 	std::uint32_t _rvaShift;        ///< Size of sections UPX1 and UPX2 which are deleted and virtual addresses are shifted.
 	bool _exportsCompressed;        ///< True if the exports are compressed in the packed file, otherwise false
 	std::vector<std::uint8_t> _coffSymbolTable; ///< COFF symbol table data if any exists.

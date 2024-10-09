@@ -3,14 +3,12 @@
 from __future__ import print_function
 
 import argparse
+import importlib
 import os
 import re
 import shutil
-import subprocess
 import sys
 
-import importlib
-config = importlib.import_module('retdec-config')
 utils = importlib.import_module('retdec-utils')
 utils.check_python_version()
 CmdRunner = utils.CmdRunner
@@ -18,9 +16,12 @@ CmdRunner = utils.CmdRunner
 
 sys.stdout = utils.Unbuffered(sys.stdout)
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DECOMPILER = os.path.join(SCRIPT_DIR, 'retdec-decompiler')
+EXTRACT = os.path.join(SCRIPT_DIR, 'retdec-macho-extractor')
 
 def parse_args(args):
-    parser = argparse.ArgumentParser(description='Runs the decompilation script with the given optional arguments over'
+    parser = argparse.ArgumentParser(description='Runs the decompilation with the given optional arguments over'
                                                  ' all files in the given static library or prints list of files in'
                                                  ' plain text with --plain argument or in JSON format with'
                                                  ' --json argument. You can pass arguments for decompilation after'
@@ -127,19 +128,17 @@ class ArchiveDecompiler:
         if not self._check_arguments():
             return 1
 
-        cmd = CmdRunner()
-
         # Check for archives packed in Mach-O Universal Binaries.
         if utils.is_macho_archive(self.library_path):
             if self.enable_list_mode:
                 if self.use_json_format:
-                    cmd.run_cmd([config.EXTRACT, '--objects', '--json', self.library_path])
+                    CmdRunner.run_cmd([EXTRACT, '--objects', '--json', self.library_path])
                 else:
-                    cmd.run_cmd([config.EXTRACT, '--objects', self.library_path])
+                    CmdRunner.run_cmd([EXTRACT, '--objects', self.library_path])
                 return 1
 
             self.tmp_archive = self.library_path + '.a'
-            cmd.run_cmd([config.EXTRACT, '--best', '--out', self.tmp_archive, self.library_path])
+            CmdRunner.run_cmd([EXTRACT, '--best', '--out', self.tmp_archive, self.library_path])
             self.library_path = self.tmp_archive
 
         # Check for thin archives.
@@ -169,13 +168,13 @@ class ArchiveDecompiler:
             self._cleanup()
             return 0
 
-        # Run the decompilation script over all the found files.
-        print('Running \`%s' % config.DECOMPILER, end='')
+        # Run the decompilation over all the found files.
+        print('Running `%s' % DECOMPILER, end='')
 
         if self.decompiler_args:
             print(' '.join(self.decompiler_args), end='')
 
-        print('\` over %d files with timeout %d s. (run \`kill %d \` to terminate this script)...' % (
+        print('` over %d files with timeout %d s. (run `kill %d ` to terminate this script)...' % (
             self.file_count, self.timeout, os.getpid()), file=sys.stderr)
 
         for i in range(self.file_count):
@@ -186,13 +185,22 @@ class ArchiveDecompiler:
             log_file = self.library_path + '.file_' + str(file_index) + '.log.verbose'
 
             # Do not escape!
-            output, rc, timeouted = cmd.run_cmd([sys.executable, config.DECOMPILER, '--ar-index=' + str(i), '-o',
-                                                self.library_path + '.file_' + str(file_index) + '.c',
-                                                self.library_path] + self.decompiler_args,
-                                                timeout=self.timeout,
-                                                buffer_output=True)
+            arg_list = [
+                sys.executable,
+                DECOMPILER,
+                '--ar-index=' + str(i),
+                '-o', self.library_path + '.file_' + str(file_index) + '.c',
+                self.library_path,
+            ]
+            if self.decompiler_args:
+                arg_list.append(self.decompiler_args)
+            output, rc, timeouted = CmdRunner.run_cmd(
+                arg_list,
+                timeout=self.timeout,
+                buffer_output=True,
+            )
 
-            with open(log_file, 'wb') as f:
+            with open(log_file, 'w') as f:
                 f.write(output)
 
             if timeouted:

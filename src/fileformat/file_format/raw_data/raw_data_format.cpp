@@ -20,23 +20,34 @@ namespace fileformat {
  * @param inputStream Input stream
  * @param loadFlags Load flags
  */
-RawDataFormat::RawDataFormat(std::istream &inputStream, LoadFlags loadFlags) : FileFormat(inputStream, loadFlags)
+RawDataFormat::RawDataFormat(
+		std::istream &inputStream,
+		LoadFlags loadFlags)
+		:
+		FileFormat(inputStream, loadFlags)
 {
 	initStructures();
 }
 
-RawDataFormat::RawDataFormat(const std::string &filePath, LoadFlags loadFlags) : FileFormat(filePath, loadFlags)
+RawDataFormat::RawDataFormat(
+		const std::string &filePath,
+		LoadFlags loadFlags)
+		:
+		FileFormat(filePath, loadFlags)
 {
 	secName = ".text";
 	secType = Section::Type::CODE;
 	initStructures();
 }
 
-/**
- * Destructor
- */
-RawDataFormat::~RawDataFormat()
+RawDataFormat::RawDataFormat(
+		const std::uint8_t *data,
+		std::size_t size,
+		LoadFlags loadFlags)
+		:
+		FileFormat(data, size, loadFlags)
 {
+	initStructures();
 }
 
 /**
@@ -125,22 +136,22 @@ bool RawDataFormat::isExecutable() const
 	return true;
 }
 
-bool RawDataFormat::getMachineCode(unsigned long long &result) const
+bool RawDataFormat::getMachineCode(std::uint64_t &result) const
 {
 	return false;
 }
 
-bool RawDataFormat::getAbiVersion(unsigned long long &result) const
+bool RawDataFormat::getAbiVersion(std::uint64_t &result) const
 {
 	return false;
 }
 
-bool RawDataFormat::getImageBaseAddress(unsigned long long &imageBase) const
+bool RawDataFormat::getImageBaseAddress(std::uint64_t&imageBase) const
 {
 	return false;
 }
 
-bool RawDataFormat::getEpAddress(unsigned long long &result) const
+bool RawDataFormat::getEpAddress(std::uint64_t &result) const
 {
 	if(hasEntryPoint && isEntryPointValid())
 	{
@@ -153,7 +164,7 @@ bool RawDataFormat::getEpAddress(unsigned long long &result) const
 	return true;
 }
 
-bool RawDataFormat::getEpOffset(unsigned long long &result) const
+bool RawDataFormat::getEpOffset(std::uint64_t &result) const
 {
 	if(hasEntryPoint && isEntryPointValid())
 	{
@@ -243,7 +254,7 @@ void RawDataFormat::setBytesLength(std::size_t l)
  * Set entry point address
  * @param entryPoint Entry point address
  */
-void RawDataFormat::setEntryPoint(Address entryPoint)
+void RawDataFormat::setEntryPoint(retdec::common::Address entryPoint)
 {
 	hasEntryPoint = true;
 	epAddress = entryPoint;
@@ -253,7 +264,7 @@ void RawDataFormat::setEntryPoint(Address entryPoint)
  * Set section base address
  * @param baseAddress Section base address
  */
-void RawDataFormat::setBaseAddress(Address baseAddress)
+void RawDataFormat::setBaseAddress(retdec::common::Address baseAddress)
 {
 	section->setAddress(baseAddress);
 }

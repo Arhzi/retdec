@@ -11,6 +11,7 @@
 #include <cmath>
 #include <cstddef>
 #include <functional>
+#include <regex>
 #include <sstream>
 
 #include "retdec/utils/conversion.h"
@@ -48,17 +49,17 @@ bool isNonasciiChar(unsigned char c) {
 *        their hexadecimal values.
 */
 std::string replaceChars(const std::string &str, bool (* predicate)(unsigned char)) {
-	std::stringstream result;
-	const std::size_t maxC = std::pow(2, sizeof(std::string::value_type) * CHAR_BIT) - 1;
-	for (const auto &c : str) {
+	std::string prefix("\\x");
+	std::string result;
+	result.reserve(str.size() * 4);
+	for (const auto c : str) {
 		if (predicate(c)) {
-			const auto val = numToStr<std::size_t>(c & maxC, std::hex);
-			result << "\\x" << std::setw(2) << std::setfill('0') << val;
+			result += prefix + byteToHexString(c, false);
 		} else {
-			result << c;
+			result += c;
 		}
 	}
-	return result.str();
+	return result;
 }
 
 //
@@ -110,8 +111,10 @@ bool isPrintableOrZeroByte(WideCharType c) {
 * @brief Checks if the given string has any unprintable characters.
 */
 bool hasUnprintableChars(const WideStringType &str) {
-	return std::find_if(str.begin(), str.end(),
-		std::not1(std::ptr_fun(isPrintable))) != str.end();
+	return std::find_if(
+			str.begin(),
+			str.end(),
+			[](WideCharType c){return !isPrintable(c);}) == str.end();
 }
 
 /**
@@ -119,8 +122,10 @@ bool hasUnprintableChars(const WideStringType &str) {
 *        bytes.
 */
 bool onlyUnprintableCharsAreZeroBytes(const WideStringType &str) {
-	return std::find_if(str.begin(), str.end(),
-		std::not1(std::ptr_fun(isPrintableOrZeroByte))) == str.end();
+	return std::find_if(
+			str.begin(),
+			str.end(),
+			[](WideCharType c){return !isPrintableOrZeroByte(c);}) == str.end();
 }
 
 /**
@@ -405,6 +410,147 @@ std::string toWide(const std::string &str, std::string::size_type length) {
 }
 
 /**
+* @brief Converts unicode @a bytes to ASCII string.
+*
+* @param[in] bytes Bytes for conversion.
+* @param[in] nBytes Number of bytes.
+*
+* @return Converted string in ASCII.
+*/
+std::string unicodeToAscii(const std::uint8_t *bytes, std::size_t nBytes)
+{
+	std::stringstream result;
+	if (!bytes || !nBytes)
+	{
+		return {};
+	}
+	if (nBytes & 1)
+	{
+		nBytes--;
+	}
+
+	for (std::size_t i = 0; i < nBytes; i += 2)
+	{
+		if (bytes[i] == 0 && bytes[i + 1] == 0)
+		{
+			break;
+		}
+		if (bytes[i + 1] == 0 && isPrintableChar(bytes[i]))
+		{
+			result << bytes[i];
+		}
+		else
+		{
+			const std::size_t maxC = (1 << (sizeof(std::string::value_type) * CHAR_BIT)) - 1;
+			const auto val1 = intToHexString(bytes[i] & maxC);
+			const auto val2 = intToHexString(bytes[i + 1] & maxC);
+			result << "\\x" << std::setw(2) << std::setfill('0') << val1;
+			result << "\\x" << std::setw(2) << std::setfill('0') << val2;
+		}
+	}
+
+	return result.str();
+}
+
+/**
+* @brief Converts unicode @a bytes to ASCII string.
+*
+* @param[in] bytes Bytes for conversion.
+* @param[in] nBytes Number of bytes.
+* @param[in] nRead Number of bytes read. Note that this doesn't have to be the length of returned string
+*
+* @return Converted string in ASCII.
+*/
+std::string unicodeToAscii(const std::uint8_t *bytes, std::size_t nBytes, std::size_t &nRead)
+{
+	std::stringstream result;
+	if (!bytes || !nBytes)
+	{
+		return {};
+	}
+	if (nBytes & 1)
+	{
+		nBytes--;
+	}
+
+	std::size_t i;
+	for (i = 0; i < nBytes; i += 2)
+	{
+		if (bytes[i] == 0 && bytes[i + 1] == 0)
+		{
+			i += 2;
+			break;
+		}
+		if (bytes[i + 1] == 0 && isPrintableChar(bytes[i]))
+		{
+			result << bytes[i];
+		}
+		else
+		{
+			const std::size_t maxC = (1 << (sizeof(std::string::value_type) * CHAR_BIT)) - 1;
+			const auto val1 = intToHexString(bytes[i] & maxC);
+			const auto val2 = intToHexString(bytes[i + 1] & maxC);
+			result << "\\x" << std::setw(2) << std::setfill('0') << val1;
+			result << "\\x" << std::setw(2) << std::setfill('0') << val2;
+		}
+	}
+
+	nRead = i;
+	return result.str();
+}
+
+/**
+* @brief Read up to @a maxBytes bytes as ASCII string.
+*
+* @param[in] bytes Bytes to read from.
+* @param[in] bytesLen Length of @a bytes
+* @param[in] offset Offset in bytes.
+* @param[in] maxBytes Maximum of bytes to read. Zero indicates as much as possible.
+* @param[in] failOnExceed If string isn't null terminated until @a maxBytes, an empty string is returned
+*
+* @return Converted string in ASCII.
+*/
+std::string readNullTerminatedAscii(const std::uint8_t *bytes, std::size_t bytesLen, std::size_t offset,
+									std::size_t maxBytes, bool failOnExceed)
+{
+	std::string result;
+	if (!bytes)
+	{
+		return {};
+	}
+
+	if (maxBytes == 0)
+	{
+		maxBytes = bytesLen;
+	}
+	else if (offset + maxBytes > bytesLen)
+	{
+		maxBytes = bytesLen;
+	}
+	else
+	{
+		maxBytes += offset;
+	}
+
+	std::size_t i;
+	for (i = offset; i < maxBytes; i++)
+	{
+		if (bytes[i] == '\0')
+		{
+			break;
+		}
+		result.push_back(bytes[i]);
+	}
+
+	if (i == maxBytes && failOnExceed)
+	{
+		return {};
+	}
+
+	return replaceNonprintableChars(result);
+}
+
+/**
 * @brief Trims the given string.
 *
 * @param[in] str String to be trimmed.
@@ -531,6 +677,23 @@ bool endsWith(const std::string &str, const std::string &withWhat) {
 */
 bool endsWith(const std::string &str, char withWhat) {
 	return !str.empty() && str.back() == withWhat;
+}
+
+/**
+* @return @c true if @a str ends with any of the suffixes in @a withWhat,
+         @c false otherwise
+*/
+bool endsWith(const std::string &str, const std::set<std::string>& withWhat)
+{
+	for (auto& s : withWhat)
+	{
+		if (endsWith(str, s))
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 /**
@@ -972,15 +1135,6 @@ std::string removeSuffixRet(const std::string &n, const std::string &suffix) {
 }
 
 /**
-* @brief Returns hex-string form of the given integer.
-*/
-std::string toHexString(unsigned long long val) {
-	std::stringstream ss;
-	ss << std::hex << val;
-	return ss.str();
-}
-
-/**
 * @brief Replaces all special symbols by their normalized equivalent.
 *
 * @param[in] name Input string.
@@ -1233,6 +1387,27 @@ std::string removeComments(const std::string& str, char commentChar)
 		}
 	}
 	return ret;
+}
+
+/**
+ * Search for version stored in input string
+ * @param input Input string
+ * @return Found version or empty string if no version found.
+ *
+ * A version is considered to be a substring which consisting of numbers
+ * (and dots). If input string contains more versions, result contains only
+ * the first one.
+ */
+std::string extractVersion(const std::string& input)
+{
+	static std::regex e("([0-9]+\\.)+[0-9]+");
+	std::smatch match;
+	if (regex_search(input, match, e))
+	{
+		return match.str();
+	}
+
+	return std::string();
 }
 
 } // namespace utils

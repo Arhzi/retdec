@@ -8,6 +8,7 @@
 #define RETDEC_FILEFORMAT_FFTYPES_H
 
 #include "retdec/fileformat/types/certificate_table/certificate_table.h"
+#include "retdec/fileformat/types/pe_timestamps/pe_timestamps.h"
 #include "retdec/fileformat/types/dotnet_headers/clr_header.h"
 #include "retdec/fileformat/types/dotnet_headers/metadata_header.h"
 #include "retdec/fileformat/types/dotnet_headers/stream.h"
@@ -32,6 +33,7 @@
 #include "retdec/fileformat/types/strings/string.h"
 #include "retdec/fileformat/types/symbol_table/macho_symbol.h"
 #include "retdec/fileformat/types/symbol_table/symbol_table.h"
+#include "retdec/fileformat/types/tls_info/tls_info.h"
 
 namespace retdec {
 namespace fileformat {

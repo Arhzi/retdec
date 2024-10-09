@@ -18,6 +18,7 @@ using namespace llvm::object;
 using namespace retdec::cpdetect;
 using namespace retdec::fileformat;
 
+namespace retdec {
 namespace fileinfo {
 
 /**
@@ -27,19 +28,15 @@ namespace fileinfo {
  * @param searchPar Parameters for detection of used compiler (or packer)
  * @param loadFlags Load flags
  */
-MachODetector::MachODetector(std::string pathToInputFile, FileInformation &finfo, retdec::cpdetect::DetectParams &searchPar, retdec::fileformat::LoadFlags loadFlags) :
-	FileDetector(pathToInputFile, finfo, searchPar, loadFlags)
+MachODetector::MachODetector(
+		std::string pathToInputFile,
+		FileInformation &finfo,
+		retdec::cpdetect::DetectParams &searchPar,
+		retdec::fileformat::LoadFlags loadFlags)
+		: FileDetector(pathToInputFile, finfo, searchPar, loadFlags)
 {
 	fileParser = machoParser = std::make_shared<MachOWrapper>(fileInfo.getPathToFile(), loadFlags);
 	loaded = machoParser->isInValidState();
-}
-
-/**
- * Destructor
- */
-MachODetector::~MachODetector()
-{
-
 }
 
 /**
@@ -47,7 +44,7 @@ MachODetector::~MachODetector()
  */
 void MachODetector::getEntryPoint()
 {
-	unsigned long long res = 0;
+	std::uint64_t res = 0;
 	if(fileParser->getEpAddress(res))
 	{
 		fileInfo.toolInfo.epAddress = res;
@@ -118,6 +115,11 @@ void MachODetector::getSections()
 		fsec.setMemoryAlignment(pow(2, mSec->getAlignment()));
 		fsec.setRelocationsOffset(mSec->getRelocationOffset());
 		fsec.setNumberOfRelocations(mSec->getNumberOfRelocations());
+		double entropy;
+		if(sec->getEntropy(entropy))
+		{
+			fsec.setEntropy(entropy);
+		}
 		fileInfo.addSection(fsec);
 	}
 }
@@ -183,8 +185,8 @@ void MachODetector::getEncryption()
 	{
 		std::stringstream message;
 		message << "Warning: This file is encrypted (encryption algorithm: " << id
-			<< ", offset: " << numToStr(offset, hexWithPrefix)
-			<< ", size: " << numToStr(size, hexWithPrefix) << ").";
+			<< ", offset: " << intToHexString(offset, true)
+			<< ", size: " << intToHexString(size, true) << ").";
 		fileInfo.messages.push_back(message.str());
 	}
 }
@@ -257,7 +259,7 @@ void MachODetector::detectFileClass()
 
 void MachODetector::detectArchitecture()
 {
-	unsigned long long machineType = 0;
+	std::uint64_t machineType = 0;
 	if(!machoParser->getMachineCode(machineType))
 	{
 		return;
@@ -331,7 +333,7 @@ void MachODetector::getAdditionalInfo()
  */
 retdec::cpdetect::CompilerDetector* MachODetector::createCompilerDetector() const
 {
-	return new MachOCompiler(*machoParser, cpParams, fileInfo.toolInfo);
+	return new CompilerDetector(*machoParser, cpParams, fileInfo.toolInfo);
 }
 
 /**
@@ -344,3 +346,4 @@ bool MachODetector::isMachoUniversalArchive()
 }
 
 } // namespace fileinfo
+} // namespace retdec

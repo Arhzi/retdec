@@ -5,15 +5,17 @@
  */
 
 #include <algorithm>
+#include <memory>
 
-#include "retdec/utils/address.h"
+#include "retdec/common/address.h"
 #include "fileinfo/file_information/file_information.h"
 #include "fileinfo/file_information/file_information_types/type_conversions.h"
 
-using namespace retdec::utils;
+using namespace retdec::common;
 using namespace retdec::cpdetect;
 using namespace retdec::fileformat;
 
+namespace retdec {
 namespace fileinfo {
 
 namespace
@@ -87,22 +89,6 @@ void sortPatternMatches(std::vector<Pattern> &patterns)
 } // anonymous namespace
 
 /**
- * Constructor
- */
-FileInformation::FileInformation() : status(ReturnCode::OK), fileFormatEnum(Format::UNKNOWN)
-{
-
-}
-
-/**
- * Destructor
- */
-FileInformation::~FileInformation()
-{
-
-}
-
-/**
  * Get status
  * @return Status of instance
  */
@@ -118,6 +104,20 @@ ReturnCode FileInformation::getStatus() const
 std::string FileInformation::getPathToFile() const
 {
 	return filePath;
+}
+
+/**
+ * Get time when the analysis was done
+ * @return Analysis time
+ */
+std::string FileInformation::getAnalysisTime() const
+{
+	return analysisTime;
+}
+
+std::string FileInformation::getTelfhash() const
+{
+	return telfhash;
 }
 
 /**
@@ -678,6 +678,15 @@ std::string FileInformation::getOverlaySizeStr(std::ios_base &(* format)(std::io
 }
 
 /**
+ * Get overlay entropy
+ * @return Overlay entropy
+ */
+std::string FileInformation::getOverlayEntropyStr(std::ios_base &(* format)(std::ios_base &)) const
+{
+	return header.getOverlayEntropyStr(format);
+}
+
+/**
  * Get number of records in rich header
  * @return Number of records in rich header
  */
@@ -727,9 +736,9 @@ std::string FileInformation::getRichHeaderKeyStr(std::ios_base &(* format)(std::
  * @param position Index of selected record from header (indexed from 0)
  * @return Major version of linker
  */
-std::string FileInformation::getRichHeaderRecordMajorVersionStr(std::size_t position) const
+std::string FileInformation::getRichHeaderRecordProductIdStr(std::size_t position) const
 {
-	return richHeader.getRecordMajorVersionStr(position);
+	return richHeader.getRecordProductIdStr(position);
 }
 
 /**
@@ -737,19 +746,9 @@ std::string FileInformation::getRichHeaderRecordMajorVersionStr(std::size_t posi
  * @param position Index of selected record from header (indexed from 0)
  * @return Minor version of linker
  */
-std::string FileInformation::getRichHeaderRecordMinorVersionStr(std::size_t position) const
+std::string FileInformation::getRichHeaderRecordProductBuildStr(std::size_t position) const
 {
-	return richHeader.getRecordMinorVersionStr(position);
-}
-
-/**
- * Get build version
- * @param position Index of selected record from header (indexed from 0)
- * @return Build version of linker
- */
-std::string FileInformation::getRichHeaderRecordBuildVersionStr(std::size_t position) const
-{
-	return richHeader.getRecordBuildVersionStr(position);
+	return richHeader.getRecordProductBuildStr(position);
 }
 
 /**
@@ -760,6 +759,26 @@ std::string FileInformation::getRichHeaderRecordBuildVersionStr(std::size_t posi
 std::string FileInformation::getRichHeaderRecordNumberOfUsesStr(std::size_t position) const
 {
 	return richHeader.getRecordNumberOfUsesStr(position);
+}
+
+/**
+ * Retrieve the product name
+ * @param position Index of selected record from header (indexed from 0)
+ * @return Product name as std::string
+ */
+std::string FileInformation::getRichHeaderRecordProductNameStr(std::size_t position) const
+{
+	return richHeader.getRecordProductNameStr(position);
+}
+
+/**
+ * Retrieve the Visual Studio name
+ * @param position Index of selected record from header (indexed from 0)
+ * @return Visual Studio name as std::string
+ */
+std::string FileInformation::getRichHeaderRecordVisualStudioNameStr(std::size_t position) const
+{
+	return richHeader.getRecordVisualStudioNameStr(position);
 }
 
 /**
@@ -779,6 +798,347 @@ std::string FileInformation::getRichHeaderRawBytesStr() const
 bool FileInformation::hasRichHeaderRecords() const
 {
 	return richHeader.hasRecords();
+}
+
+std::string FileInformation::getRichHeaderSha256() const
+{
+	return richHeader.getSha256();
+}
+std::string FileInformation::getRichHeaderCrc32() const
+{
+	return richHeader.getCrc32();
+}
+std::string FileInformation::getRichHeaderMd5() const
+{
+	return richHeader.getMd5();
+}
+
+/**
+ * Check whether visual basic informations are used.
+ * @return @c true if it is used, otherwise @c false/
+ */
+bool FileInformation::isVisualBasicUsed() const
+{
+	return visualBasicInfo.isUsed();
+}
+
+/**
+ * Check whether visual basic uses P-Code.
+ * @return @c true if it does, otherwise @c false/
+ */
+bool FileInformation::getVisualBasicIsPcode() const
+{
+	return visualBasicInfo.isPcode();
+}
+
+/**
+ * Get visual basic language DLL
+ * @return Visual basic language DLL
+ */
+std::string FileInformation::getVisualBasicLanguageDLL() const
+{
+	return visualBasicInfo.getLanguageDLL();
+}
+
+/**
+ * Get visual basic backup language DLL
+ * @return Visual basic backup language DLL
+ */
+std::string FileInformation::getVisualBasicBackupLanguageDLL() const
+{
+	return visualBasicInfo.getBackupLanguageDLL();
+}
+
+/**
+ * Get visual basic project exe name
+ * @return Visual basic project exe name
+ */
+std::string FileInformation::getVisualBasicProjectExeName() const
+{
+	return visualBasicInfo.getProjectExeName();
+}
+
+/**
+ * Get visual basic project description
+ * @return Visual basic project description
+ */
+std::string FileInformation::getVisualBasicProjectDescription() const
+{
+	return visualBasicInfo.getProjectDescription();
+}
+
+/**
+ * Get visual basic project help file
+ * @return Visual basic project help file
+ */
+std::string FileInformation::getVisualBasicProjectHelpFile() const
+{
+	return visualBasicInfo.getProjectHelpFile();
+}
+
+/**
+ * Get visual basic project name
+ * @return Visual basic project name
+ */
+std::string FileInformation::getVisualBasicProjectName() const
+{
+	return visualBasicInfo.getProjectName();
+}
+
+/**
+ * Get visual basic language DLL primary LCID
+ * @return Visual basic language DLL primary LCID
+ */
+std::string FileInformation::getVisualBasicLanguageDLLPrimaryLCIDStr() const
+{
+	return visualBasicInfo.getLanguageDLLPrimaryLCIDStr();
+}
+
+/**
+ * Get visual basic language DLL secondary LCID
+ * @return Visual basic language DLL secondary LCID
+ */
+std::string FileInformation::getVisualBasicLanguageDLLSecondaryLCIDStr() const
+{
+	return visualBasicInfo.getLanguageDLLSecondaryLCIDStr();
+}
+
+/**
+ * Get visual basic project path
+ * @return Visual basic project path
+ */
+std::string FileInformation::getVisualBasicProjectPath() const
+{
+	return visualBasicInfo.getProjectPath();
+}
+
+/**
+ * Get visual basic project primary LCID
+ * @return Visual basic project primary LCID
+ */
+std::string FileInformation::getVisualBasicProjectPrimaryLCIDStr() const
+{
+	return visualBasicInfo.getProjectPrimaryLCIDStr();
+}
+
+/**
+ * Get visual basic project secondary LCID
+ * @return Visual basic project secondary LCID
+ */
+std::string FileInformation::getVisualBasicProjectSecondaryLCIDStr() const
+{
+	return visualBasicInfo.getProjectSecondaryLCIDStr();
+}
+
+/**
+ * Get visual basic object
+ * @param position Index of selected object (indexed from 0)
+ * @return Visual basic object
+ */
+const retdec::fileformat::VisualBasicObject *FileInformation::getVisualBasicObject(std::size_t position) const
+{
+	return visualBasicInfo.getObject(position);
+}
+
+/**
+ * Get visual basic extern
+ * @param position Index of selected extern (indexed from 0)
+ * @return Visual basic extern
+ */
+const retdec::fileformat::VisualBasicExtern *FileInformation::getVisualBasicExtern(std::size_t position) const
+{
+	return visualBasicInfo.getExtern(position);
+}
+
+/**
+ * Get visual basic number of objects
+ * @return Visual basic number of objects
+ */
+std::size_t FileInformation::getVisualBasicNumberOfObjects() const
+{
+	return visualBasicInfo.getNumberOfObjects();
+}
+
+/**
+ * Get visual basic number of externs
+ * @return Visual basic number of externs
+ */
+std::size_t FileInformation::getVisualBasicNumberOfExterns() const
+{
+	return visualBasicInfo.getNumberOfExterns();
+}
+
+/**
+ * Get visual basic extern module name
+ * @param position Index of selected extern (indexed from 0)
+ * @return Visual basic extern module name
+ */
+std::string FileInformation::getVisualBasicExternModuleName(std::size_t position) const
+{
+	return visualBasicInfo.getExternModuleName(position);
+}
+
+/**
+ * Get visual basic extern api name
+ * @param position Index of selected extern (indexed from 0)
+ * @return Visual basic extern api name
+ */
+std::string FileInformation::getVisualBasicExternApiName(std::size_t position) const
+{
+	return visualBasicInfo.getExternApiName(position);
+}
+
+/**
+ * Get visual basic object table GUID
+ * @return Object table GUID as string
+ */
+std::string FileInformation::getVisualBasicObjectTableGUID() const
+{
+	return visualBasicInfo.getObjectTableGUID();
+}
+
+/**
+ * Get visual basic typeLib CLSID
+ * @return typeLib CLSID as string
+ */
+std::string FileInformation::getVisualBasicTypeLibCLSID() const
+{
+	return visualBasicInfo.getTypeLibCLSID();
+}
+
+/**
+ * Get visual basic typeLib major version
+ * @return TypeLib major version
+ */
+std::string FileInformation::getVisualBasicTypeLibMajorVersionStr() const
+{
+	return visualBasicInfo.getTypeLibMajorVersionStr();
+}
+
+/**
+ * Get visual basic typeLib minor version
+ * @return TypeLib minor version
+ */
+std::string FileInformation::getVisualBasicTypeLibMinorVersionStr() const
+{
+	return visualBasicInfo.getTypeLibMinorVersionStr();
+}
+
+/**
+ * Get visual basic typeLib LCID
+ * @return Visual basic typeLib LCID
+ */
+std::string FileInformation::getVisualBasicTypeLibLCIDStr() const
+{
+	return visualBasicInfo.getTypeLibLCIDStr();
+}
+
+/**
+ * Get visual basic COM object name
+ * @return Visual basic COM object name
+ */
+std::string FileInformation::getVisualBasicCOMObjectName() const
+{
+	return visualBasicInfo.getCOMObjectName();
+}
+
+/**
+ * Get visual basic COM object description
+ * @return Visual basic COM object description
+ */
+std::string FileInformation::getVisualBasicCOMObjectDescription() const
+{
+	return visualBasicInfo.getCOMObjectDescription();
+}
+
+/**
+ * Get visual basic COM object CLSID
+ * @return Visual basic COM object CLSID
+ */
+std::string FileInformation::getVisualBasicCOMObjectCLSID() const
+{
+	return visualBasicInfo.getCOMObjectCLSID();
+}
+
+/**
+ * Get visual basic COM object interface CLSID
+ * @return Visual basic COM object interface CLSID
+ */
+std::string FileInformation::getVisualBasicCOMObjectInterfaceCLSID() const
+{
+	return visualBasicInfo.getCOMObjectInterfaceCLSID();
+}
+
+/**
+ * Get visual basic COM object events CLSID
+ * @return Visual basic COM object events CLSID
+ */
+std::string FileInformation::getVisualBasicCOMObjectEventsCLSID() const
+{
+	return visualBasicInfo.getCOMObjectEventsCLSID();
+}
+
+/**
+ * Get visual basic COM object type
+ * @return Visual basic COM object type
+ */
+std::string FileInformation::getVisualBasicCOMObjectType() const
+{
+	return visualBasicInfo.getCOMObjectType();
+}
+
+/**
+ * Get visual basic extern table hash as Crc32
+ * @return Visual basic extern table hash
+ */
+std::string FileInformation::getVisualBasicExternTableHashCrc32() const
+{
+	return visualBasicInfo.getExternTableHashCrc32();
+}
+
+/**
+ * Get visual basic extern table hash as Md5
+ * @return Visual basic extern table hash
+ */
+std::string FileInformation::getVisualBasicExternTableHashMd5() const
+{
+	return visualBasicInfo.getExternTableHashMd5();
+}
+
+/**
+ * Get visual basic extern table hash as Sha256
+ * @return Visual basic extern table hash
+ */
+std::string FileInformation::getVisualBasicExternTableHashSha256() const
+{
+	return visualBasicInfo.getExternTableHashSha256();
+}
+
+/**
+ * Get visual basic object table hash as Crc32
+ * @return Visual basic object table hash
+ */
+std::string FileInformation::getVisualBasicObjectTableHashCrc32() const
+{
+	return visualBasicInfo.getObjectTableHashCrc32();
+}
+
+/**
+ * Get visual basic object table hash as Md5
+ * @return Visual basic object table hash
+ */
+std::string FileInformation::getVisualBasicObjectTableHashMd5() const
+{
+	return visualBasicInfo.getObjectTableHashMd5();
+}
+
+/**
+ * Get visual basic object table hash as Sha256
+ * @return Visual basic object table hash
+ */
+std::string FileInformation::getVisualBasicObjectTableHashSha256() const
+{
+	return visualBasicInfo.getObjectTableHashSha256();
 }
 
 /**
@@ -872,6 +1232,14 @@ std::string FileInformation::getImphashSha256() const
 {
 	return importTable.getImphashSha256();
 }
+/**
+ * Get imphash as Tlsh
+ * @return Imphash as Tlsh
+ */
+std::string FileInformation::getImphashTlsh() const
+{
+	return importTable.getImphashTlsh();
+}
 
 /**
  * Get import
@@ -904,6 +1272,16 @@ std::string FileInformation::getImportLibraryName(std::size_t position) const
 }
 
 /**
+ * Get import type
+ * @param position Index of selected import (indexed from 0)
+ * @return Symbol type
+ */
+std::string FileInformation::getImportUsageType(std::size_t position) const
+{
+	return importTable.getImportUsageType(position);
+}
+
+/**
  * Get import address
  * @param position Index of selected import (indexed from 0)
  * @param format Format of resulting string (e.g. std::dec, std::hex)
@@ -932,6 +1310,47 @@ std::string FileInformation::getImportOrdinalNumberStr(std::size_t position, std
 bool FileInformation::hasImportTableRecords() const
 {
 	return importTable.hasRecords();
+}
+
+/**
+ * Get number of missing dependencies
+ * @return Number of missing dependencies
+ */
+std::size_t FileInformation::getNumberOfMissingDeps() const
+{
+	return importTable.getNumberOfMissingDeps();
+}
+
+/**
+ * Get missing dependency name
+ * @param position Index of selected dependency (indexed from 0)
+ * @return Name of the missing dependency
+ */
+std::string FileInformation::getMissingDepName(std::size_t position) const
+{
+	return importTable.getMissingDepName(position);
+}
+
+/**
+ * Get the name of the dependency file that failed to load
+ * @return Name of the failed-to-load dependency listfile
+ */
+std::string FileInformation::getDepsListFailedToLoad() const
+{
+	return failedDepsList;
+}
+
+/**
+ * Sets the name of the dependency file that failed to load
+ */
+void FileInformation::setDepsListFailedToLoad(const std::string & depsList)
+{
+	failedDepsList = depsList;
+}
+
+std::string FileInformation::getExportDllName() const
+{
+	return exportTable.getDllName();
 }
 
 /**
@@ -1018,6 +1437,24 @@ bool FileInformation::hasExportTableRecords() const
 std::size_t FileInformation::getNumberOfStoredResources() const
 {
 	return resourceTable.getNumberOfResources();
+}
+
+/**
+ * Get number of supported version info languages
+ * @return Number of supported version info languages
+ */
+std::size_t FileInformation::getNumberOfVersionInfoLanguages() const
+{
+	return resourceTable.getNumberOfLanguages();
+}
+
+/**
+ * Get number of version info strings
+ * @return Number of version info strings
+ */
+std::size_t FileInformation::getNumberOfVersionInfoStrings() const
+{
+	return resourceTable.getNumberOfStrings();
 }
 
 /**
@@ -1117,6 +1554,46 @@ std::string FileInformation::getResourceLanguage(std::size_t index) const
 }
 
 /**
+ * Get LCID of selected version info language
+ * @param index Index of selected version info language (indexed from 0)
+ * @return LCID of selected version info language
+ */
+std::string FileInformation::getVersionInfoLanguageLcid(std::size_t index) const
+{
+	return resourceTable.getLanguageLcid(index);
+}
+
+/**
+ * Get code page of selected version info language
+ * @param index Index of selected version info language (indexed from 0)
+ * @return Code page of selected version info language
+ */
+std::string FileInformation::getVersionInfoLanguageCodePage(std::size_t index) const
+{
+	return resourceTable.getLanguageCodePage(index);
+}
+
+/**
+ * Get name of selected version info string
+ * @param index Index of selected version info string (indexed from 0)
+ * @return Name of selected version info string
+ */
+std::string FileInformation::getVersionInfoStringName(std::size_t index) const
+{
+	return resourceTable.getStringName(index);
+}
+
+/**
+ * Get value of selected version info string
+ * @param index Index of selected version info string (indexed from 0)
+ * @return Value of selected version info string
+ */
+std::string FileInformation::getVersionInfoStringValue(std::size_t index) const
+{
+	return resourceTable.getStringValue(index);
+}
+
+/**
  * Get name ID of selected resource
  * @param index Index of selected resource (indexed from 0)
  * @param format Format of resulting string (e.g. std::dec, std::hex)
@@ -1191,459 +1668,93 @@ bool FileInformation::hasResourceTableRecords() const
 	return resourceTable.hasRecords();
 }
 
+
 /**
- * Get number of stored certificates
- * @return Number of stored certificates
+ * Get start address of raw data of TLS
+ * @param format Format of result (e.g. std::dec, std::hex)
+ * @return Start address of raw data of TLS
  */
-std::size_t FileInformation::getNumberOfStoredCertificates() const
+std::string FileInformation::getTlsRawDataStartAddrStr(std::ios_base &(* format)(std::ios_base &)) const
 {
-	return certificateTable.getNumberOfCertificates();
+	return tlsInfo.getRawDataStartAddrStr(format);
 }
 
 /**
- * Get index of the certificate of the counter-signer. Returned value should not be used without prior checking
- * of whether the table has counter-signer certificate.
- * @return Index of the counter-signer's certificate
+ * Get end address of raw data of TLS
+ * @param format Format of result (e.g. std::dec, std::hex)
+ * @return End address of raw data of TLS
  */
-std::size_t FileInformation::getCertificateTableSignerCertificateIndex() const
+std::string FileInformation::getTlsRawDataEndAddrStr(std::ios_base &(* format)(std::ios_base &)) const
 {
-	return certificateTable.getSignerCertificateIndex();
+	return tlsInfo.getRawDataEndAddrStr(format);
 }
 
 /**
- * Get date since when is certificate valid
- * @return Date since when is certificate valid
+ * Get address of index of TLS
+ * @param format Format of result (e.g. std::dec, std::hex)
+ * @return Address of index of TLS
  */
-std::size_t FileInformation::getCertificateTableCounterSignerCertificateIndex() const
+std::string FileInformation::getTlsIndexAddrStr(std::ios_base &(* format)(std::ios_base &)) const
 {
-	return certificateTable.getCounterSignerCertificateIndex();
+	return tlsInfo.getIndexAddrStr(format);
 }
 
 /**
- * Get date since when is certificate valid
- * @param index Index of selected certificate from table (indexed from 0)
- * @return Date since when is certificate valid
+ * Get address of callbacks of TLS
+ * @param format Format of result (e.g. std::dec, std::hex)
+ * @return Address of callbacks of TLS
  */
-std::string FileInformation::getCertificateValidSince(std::size_t index) const
+std::string FileInformation::getTlsCallBacksAddrStr(std::ios_base &(* format)(std::ios_base &)) const
 {
-	return certificateTable.getCertificateValidSince(index);
+	return tlsInfo.getCallBacksAddrStr(format);
 }
 
 /**
- * Get date until when is certificate valid
- * @param index Index of selected certificate from table (indexed from 0)
- * @return Date until when is certificate valid
+ * Get size of zero fill of TLS
+ * @param format Format of result (e.g. std::dec, std::hex)
+ * @return Size of zero fill of TLS
  */
-std::string FileInformation::getCertificateValidUntil(std::size_t index) const
+std::string FileInformation::getTlsZeroFillSizeStr(std::ios_base &(* format)(std::ios_base &)) const
 {
-	return certificateTable.getCertificateValidUntil(index);
+	return tlsInfo.getZeroFillSizeStr(format);
 }
 
 /**
- * Get certificate public key
- * @param index Index of selected certificate from table (indexed from 0)
- * @return Public key
+ * Get characteristics of TLS
+ * @return Characteristics of TLS
  */
-std::string FileInformation::getCertificatePublicKey(std::size_t index) const
+std::string FileInformation::getTlsCharacteristicsStr() const
 {
-	return certificateTable.getCertificatePublicKey(index);
+	return tlsInfo.getCharacteristicsStr();
 }
 
 /**
- * Get certificate public key algorithm
- * @param index Index of selected certificate from table (indexed from 0)
- * @return Public key algorithm
+ * Get number of callbacks of TLS
+ * @return Number of callbacks of TLS
  */
-std::string FileInformation::getCertificatePublicKeyAlgorithm(std::size_t index) const
+std::size_t FileInformation::getTlsNumberOfCallBacks() const
 {
-	return certificateTable.getCertificatePublicKeyAlgorithm(index);
+	return tlsInfo.getNumberOfCallBacks();
 }
 
 /**
- * Get certificate signature algorithm
- * @param index Index of selected certificate from table (indexed from 0)
- * @return Signature algorithm
+ * Get TLS callback
+ * @param position Position of directory in internal list of directories (0..x)
+ * @param format Format of result (e.g. std::dec, std::hex)
+ * @return TLS callback
  */
-std::string FileInformation::getCertificateSignatureAlgorithm(std::size_t index) const
+std::string FileInformation::getTlsCallBackAddrStr(std::size_t position, std::ios_base &(* format)(std::ios_base &)) const
 {
-	return certificateTable.getCertificateSignatureAlgorithm(index);
+	return tlsInfo.getCallBackAddrStr(position, format);
 }
 
 /**
- * Get certificate serial number
- * @param index Index of selected certificate from table (indexed from 0)
- * @return Serial number
+ * Check whether TLS is used
+ * @return @c true if TLS is used, @c false otherwise
  */
-std::string FileInformation::getCertificateSerialNumber(std::size_t index) const
+bool FileInformation::isTlsUsed() const
 {
-	return certificateTable.getCertificateSerialNumber(index);
-}
-
-/**
- * Get certificate SHA1 digest
- * @param index Index of selected certificate from table (indexed from 0)
- * @return SHA1 digest
- */
-std::string FileInformation::getCertificateSha1Digest(std::size_t index) const
-{
-	return certificateTable.getCertificateSha1Digest(index);
-}
-
-/**
- * Get certificate SHA256 digest
- * @param index Index of selected certificate from table (indexed from 0)
- * @return SHA256 digest
- */
-std::string FileInformation::getCertificateSha256Digest(std::size_t index) const
-{
-	return certificateTable.getCertificateSha256Digest(index);
-}
-
-/**
- * Get certificate issuer
- * @param index Index of selected certificate (indexed from 0)
- * @return Issuer of selected certificate
- */
-std::string FileInformation::getCertificateIssuerRawStr(std::size_t index) const
-{
-	return certificateTable.getCertificateIssuerRaw(index);
-}
-
-/**
- * Get certificate subject
- * @param index Index of selected certificate (indexed from 0)
- * @return Subject of selected certificate
- */
-std::string FileInformation::getCertificateSubjectRawStr(std::size_t index) const
-{
-	return certificateTable.getCertificateSubjectRaw(index);
-}
-
-/**
- * Get certificate issuer country
- * @param index Index of selected certificate (indexed from 0)
- * @return Country of selected certificate issuer
- */
-std::string FileInformation::getCertificateIssuerCountry(std::size_t index) const
-{
-	return certificateTable.getCertificateIssuerCountry(index);
-}
-
-/**
- * Get certificate issuer organization
- * @param index Index of selected certificate (indexed from 0)
- * @return Organization of selected certificate issuer
- */
-std::string FileInformation::getCertificateIssuerOrganization(std::size_t index) const
-{
-	return certificateTable.getCertificateIssuerOrganization(index);
-}
-
-/**
- * Get certificate issuer organizational unit
- * @param index Index of selected certificate (indexed from 0)
- * @return Organizational unit of selected certificate issuer
- */
-std::string FileInformation::getCertificateIssuerOrganizationalUnit(std::size_t index) const
-{
-	return certificateTable.getCertificateIssuerOrganizationalUnit(index);
-}
-
-/**
- * Get certificate issuer name qualifier
- * @param index Index of selected certificate (indexed from 0)
- * @return Name qualifier of selected certificate issuer
- */
-std::string FileInformation::getCertificateIssuerNameQualifier(std::size_t index) const
-{
-	return certificateTable.getCertificateIssuerNameQualifier(index);
-}
-
-/**
- * Get certificate issuer state
- * @param index Index of selected certificate (indexed from 0)
- * @return State of selected certificate issuer
- */
-std::string FileInformation::getCertificateIssuerState(std::size_t index) const
-{
-	return certificateTable.getCertificateIssuerState(index);
-}
-
-/**
- * Get certificate issuer common name
- * @param index Index of selected certificate (indexed from 0)
- * @return Common name of selected certificate issuer
- */
-std::string FileInformation::getCertificateIssuerCommonName(std::size_t index) const
-{
-	return certificateTable.getCertificateIssuerCommonName(index);
-}
-
-/**
- * Get certificate issuer serial number
- * @param index Index of selected certificate (indexed from 0)
- * @return Serial number of selected certificate issuer
- */
-std::string FileInformation::getCertificateIssuerSerialNumber(std::size_t index) const
-{
-	return certificateTable.getCertificateIssuerSerialNumber(index);
-}
-
-/**
- * Get certificate issuer locality
- * @param index Index of selected certificate (indexed from 0)
- * @return Locality of selected certificate issuer
- */
-std::string FileInformation::getCertificateIssuerLocality(std::size_t index) const
-{
-	return certificateTable.getCertificateIssuerLocality(index);
-}
-
-/**
- * Get certificate issuer title
- * @param index Index of selected certificate (indexed from 0)
- * @return Title of selected certificate issuer
- */
-std::string FileInformation::getCertificateIssuerTitle(std::size_t index) const
-{
-	return certificateTable.getCertificateIssuerTitle(index);
-}
-
-/**
- * Get certificate issuer surname
- * @param index Index of selected certificate (indexed from 0)
- * @return Surname of selected certificate issuer
- */
-std::string FileInformation::getCertificateIssuerSurname(std::size_t index) const
-{
-	return certificateTable.getCertificateIssuerSurname(index);
-}
-
-/**
- * Get certificate issuer given name
- * @param index Index of selected certificate (indexed from 0)
- * @return Given name of selected certificate issuer
- */
-std::string FileInformation::getCertificateIssuerGivenName(std::size_t index) const
-{
-	return certificateTable.getCertificateIssuerGivenName(index);
-}
-
-/**
- * Get certificate issuer initials
- * @param index Index of selected certificate (indexed from 0)
- * @return Initials of selected certificate issuer
- */
-std::string FileInformation::getCertificateIssuerInitials(std::size_t index) const
-{
-	return certificateTable.getCertificateIssuerInitials(index);
-}
-
-/**
- * Get certificate issuer pseudonym
- * @param index Index of selected certificate (indexed from 0)
- * @return Pseudonym of selected certificate issuer
- */
-std::string FileInformation::getCertificateIssuerPseudonym(std::size_t index) const
-{
-	return certificateTable.getCertificateIssuerPseudonym(index);
-}
-
-/**
- * Get certificate issuer generation qualifier
- * @param index Index of selected certificate (indexed from 0)
- * @return Generation qualifier of selected certificate issuer
- */
-std::string FileInformation::getCertificateIssuerGenerationQualifier(std::size_t index) const
-{
-	return certificateTable.getCertificateIssuerGenerationQualifier(index);
-}
-
-/**
- * Get certificate issuer email address
- * @param index Index of selected certificate (indexed from 0)
- * @return Email address of selected certificate issuer
- */
-std::string FileInformation::getCertificateIssuerEmailAddress(std::size_t index) const
-{
-	return certificateTable.getCertificateIssuerEmailAddress(index);
-}
-
-/**
- * Get certificate subject country
- * @param index Index of selected certificate (indexed from 0)
- * @return Country of selected certificate subject
- */
-std::string FileInformation::getCertificateSubjectCountry(std::size_t index) const
-{
-	return certificateTable.getCertificateSubjectCountry(index);
-}
-
-/**
- * Get certificate subject organization
- * @param index Index of selected certificate (indexed from 0)
- * @return Organization of selected certificate subject
- */
-std::string FileInformation::getCertificateSubjectOrganization(std::size_t index) const
-{
-	return certificateTable.getCertificateSubjectOrganization(index);
-}
-
-/**
- * Get certificate subject organizational unit
- * @param index Index of selected certificate (indexed from 0)
- * @return Organizational unit of selected certificate subject
- */
-std::string FileInformation::getCertificateSubjectOrganizationalUnit(std::size_t index) const
-{
-	return certificateTable.getCertificateSubjectOrganizationalUnit(index);
-}
-
-/**
- * Get certificate subject name qualifier
- * @param index Index of selected certificate (indexed from 0)
- * @return Name qualifier of selected certificate subject
- */
-std::string FileInformation::getCertificateSubjectNameQualifier(std::size_t index) const
-{
-	return certificateTable.getCertificateSubjectNameQualifier(index);
-}
-
-/**
- * Get certificate subject state
- * @param index Index of selected certificate (indexed from 0)
- * @return State of selected certificate subject
- */
-std::string FileInformation::getCertificateSubjectState(std::size_t index) const
-{
-	return certificateTable.getCertificateSubjectState(index);
-}
-
-/**
- * Get certificate subject common name
- * @param index Index of selected certificate (indexed from 0)
- * @return Common name of selected certificate subject
- */
-std::string FileInformation::getCertificateSubjectCommonName(std::size_t index) const
-{
-	return certificateTable.getCertificateSubjectCommonName(index);
-}
-
-/**
- * Get certificate subject serial number
- * @param index Index of selected certificate (indexed from 0)
- * @return Serial number of selected certificate subject
- */
-std::string FileInformation::getCertificateSubjectSerialNumber(std::size_t index) const
-{
-	return certificateTable.getCertificateSubjectSerialNumber(index);
-}
-
-/**
- * Get certificate subject locality
- * @param index Index of selected certificate (indexed from 0)
- * @return Locality of selected certificate subject
- */
-std::string FileInformation::getCertificateSubjectLocality(std::size_t index) const
-{
-	return certificateTable.getCertificateSubjectLocality(index);
-}
-
-/**
- * Get certificate subject title
- * @param index Index of selected certificate (indexed from 0)
- * @return Title of selected certificate subject
- */
-std::string FileInformation::getCertificateSubjectTitle(std::size_t index) const
-{
-	return certificateTable.getCertificateSubjectTitle(index);
-}
-
-/**
- * Get certificate subject surname
- * @param index Index of selected certificate (indexed from 0)
- * @return Surname of selected certificate subject
- */
-std::string FileInformation::getCertificateSubjectSurname(std::size_t index) const
-{
-	return certificateTable.getCertificateSubjectSurname(index);
-}
-
-/**
- * Get certificate subject given name
- * @param index Index of selected certificate (indexed from 0)
- * @return Given name of selected certificate subject
- */
-std::string FileInformation::getCertificateSubjectGivenName(std::size_t index) const
-{
-	return certificateTable.getCertificateSubjectGivenName(index);
-}
-
-/**
- * Get certificate subject initials
- * @param index Index of selected certificate (indexed from 0)
- * @return Initials of selected certificate subject
- */
-std::string FileInformation::getCertificateSubjectInitials(std::size_t index) const
-{
-	return certificateTable.getCertificateSubjectInitials(index);
-}
-
-/**
- * Get certificate subject pseudonym
- * @param index Index of selected certificate (indexed from 0)
- * @return Pseudonym of selected certificate subject
- */
-std::string FileInformation::getCertificateSubjectPseudonym(std::size_t index) const
-{
-	return certificateTable.getCertificateSubjectPseudonym(index);
-}
-
-/**
- * Get certificate subject generation qualifier
- * @param index Index of selected certificate (indexed from 0)
- * @return Generation qualifier of selected certificate subject
- */
-std::string FileInformation::getCertificateSubjectGenerationQualifier(std::size_t index) const
-{
-	return certificateTable.getCertificateSubjectGenerationQualifier(index);
-}
-
-/**
- * Get certificate subject email address
- * @param index Index of selected certificate (indexed from 0)
- * @return Email address of selected certificate subject
- */
-std::string FileInformation::getCertificateSubjectEmailAddress(std::size_t index) const
-{
-	return certificateTable.getCertificateSubjectEmailAddress(index);
-}
-
-/**
- * Find out if there are any records in certificate table
- * @return @c true if certificate table is not empty, @c false otherwise
- */
-bool FileInformation::hasCertificateTableRecords() const
-{
-	return certificateTable.hasRecords();
-}
-
-/**
- * Find out if there is signer certificate
- * @return @c true if there is signer certificate, @c false otherwise
- */
-bool FileInformation::hasCertificateTableSignerCertificate() const
-{
-	return certificateTable.hasSignerCertificate();
-}
-
-/**
- * Find out if there is counter-signer certificate
- * @return @c true if there is counter-signer certificate, @c false otherwise
- */
-bool FileInformation::hasCertificateTableCounterSignerCertificate() const
-{
-	return certificateTable.hasCounterSignerCertificate();
+	return tlsInfo.isUsed();
 }
 
 /**
@@ -1863,6 +1974,17 @@ std::string FileInformation::getSectionName(std::size_t position) const
 std::string FileInformation::getSectionType(std::size_t position) const
 {
 	return sections[position].getType();
+}
+
+/**
+ * Get section entropy
+ * @param position Position of section in internal list of sections (0..x)
+ * @param format Format of resulting string (e.g. std::dec, std::hex)
+ * @return Entropy of section
+ */
+std::string FileInformation::getSectionEntropy(std::size_t position, std::ios_base &(* format)(std::ios_base &)) const
+{
+	return sections[position].getEntropyStr(format);
 }
 
 /**
@@ -2678,7 +2800,7 @@ bool FileInformation::hasStrings() const
  */
 bool FileInformation::isSignaturePresent() const
 {
-	return signatureVerified.isDefined();
+	return signatureVerified.has_value();
 }
 
 /**
@@ -2687,7 +2809,7 @@ bool FileInformation::isSignaturePresent() const
  */
 bool FileInformation::isSignatureVerified() const
 {
-	return signatureVerified.isDefined() && signatureVerified.getValue();
+	return signatureVerified.has_value() && signatureVerified.value();
 }
 
 /**
@@ -3147,6 +3269,35 @@ bool FileInformation::hasDotnetTypeRefTableRecords() const
 }
 
 /**
+ * Get number of anomalies
+ * @return Number of anomalies
+ */
+std::size_t FileInformation::getNumberOfAnomalies() const
+{
+	return anomalies.size();
+}
+
+/**
+ * Get identifier of anomaly
+ * @param position Index of selected anomaly (indexed from 0)
+ * @return Identifier of selected anomaly
+ */
+std::string FileInformation::getAnomalyIdentifier(std::size_t position) const
+{
+	return (position < getNumberOfAnomalies()) ? anomalies[position].first : "";
+}
+
+/**
+ * Get description of anomaly
+ * @param position Index of selected anomaly (indexed from 0)
+ * @return Description of selected anomaly
+ */
+std::string FileInformation::getAnomalyDescription(std::size_t position) const
+{
+	return (position < getNumberOfAnomalies()) ? anomalies[position].second : "";
+}
+
+/**
  * Set instance status
  * @param state New status of this instance
  */
@@ -3162,6 +3313,20 @@ void FileInformation::setStatus(ReturnCode state)
 void FileInformation::setPathToFile(const std::string &filepath)
 {
 	filePath = filepath;
+}
+
+/**
+ * Set when the analysis was done
+ * @param analysistime Analysis time
+ */
+void FileInformation::setAnalysisTime(const std::string &analysistime)
+{
+	analysisTime = analysistime;
+}
+
+void FileInformation::setTelfhash(const std::string &hash)
+{
+	telfhash = hash;
 }
 
 /**
@@ -3579,12 +3744,39 @@ void FileInformation::setOverlaySize(unsigned long long size)
 }
 
 /**
+ * Set overlay entropy
+ * @param entropy Entropy of overlay
+ */
+void FileInformation::setOverlayEntropy(double entropy)
+{
+	header.setOverlayEntropy(entropy);
+}
+
+/**
  * Set rich header
  * @param rHeader Information about rich header
  */
 void FileInformation::setRichHeader(const retdec::fileformat::RichHeader *rHeader)
 {
 	richHeader.setHeader(rHeader);
+}
+
+/**
+ * Set visual basic information
+ * @param vbInfo Information about visual basic
+ */
+void FileInformation::setVisualBasicInfo(const retdec::fileformat::VisualBasicInfo *vbInfo)
+{
+	visualBasicInfo.setInfo(vbInfo);
+}
+
+/**
+ * Sets whether visual basic informations are used.
+ * @param set @c true if used, otherwise @c false.
+ */
+void FileInformation::setVisualBasicUsed(bool set)
+{
+	visualBasicInfo.setUsed(set);
 }
 
 /**
@@ -3672,9 +3864,18 @@ void FileInformation::setStrings(const std::vector<retdec::fileformat::String> *
  * Set certificate table
  * @param sTable Information about certificate table
  */
-void FileInformation::setCertificateTable(const retdec::fileformat::CertificateTable *sTable)
+void FileInformation::setCertificateTable(const retdec::fileformat::CertificateTable*  sTable)
 {
-	certificateTable.setTable(sTable);
+	certificateTable = sTable;
+}
+
+/**
+ * Set TLS information
+ * @param info Information TLS
+ */
+void FileInformation::setTlsInfo(const retdec::fileformat::TlsInfo *info)
+{
+	tlsInfo.setTlsInfo(info);
 }
 
 /**
@@ -3852,6 +4053,15 @@ void FileInformation::setDotnetTypeRefhashMd5(const std::string& md5)
 void FileInformation::setDotnetTypeRefhashSha256(const std::string& sha256)
 {
 	dotnetInfo.setTypeRefhashSha256(sha256);
+}
+
+/**
+ * Sets anomalies
+ * @param anom Anomalies
+ */
+void FileInformation::setAnomalies(const std::vector<std::pair<std::string,std::string>> &anom)
+{
+	anomalies = anom;
 }
 
 /**
@@ -4062,3 +4272,4 @@ void FileInformation::addLoadedSegment(const LoadedSegment& segment)
 }
 
 } // namespace fileinfo
+} // namespace retdec

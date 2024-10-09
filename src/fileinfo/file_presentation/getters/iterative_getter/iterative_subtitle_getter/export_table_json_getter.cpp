@@ -12,6 +12,7 @@
 using namespace retdec::utils;
 using namespace retdec::fileformat;
 
+namespace retdec {
 namespace fileinfo {
 
 /**
@@ -31,14 +32,6 @@ ExportTableJsonGetter::ExportTableJsonGetter(FileInformation &fileInfo) : Iterat
 	commonHeaderElements.push_back("address");
 }
 
-/**
- * Destructor
- */
-ExportTableJsonGetter::~ExportTableJsonGetter()
-{
-
-}
-
 std::size_t ExportTableJsonGetter::getBasicInfo(std::size_t structIndex, std::vector<std::string> &desc, std::vector<std::string> &info) const
 {
 	if(structIndex >= numberOfStructures || !fileinfo.hasExportTableRecords())
@@ -53,7 +46,7 @@ std::size_t ExportTableJsonGetter::getBasicInfo(std::size_t structIndex, std::ve
 	desc.push_back("crc32");
 	desc.push_back("md5");
 	desc.push_back("sha256");
-	info.push_back(numToStr(fileinfo.getNumberOfStoredExports()));
+	info.push_back(std::to_string(fileinfo.getNumberOfStoredExports()));
 	info.push_back(fileinfo.getExphashCrc32());
 	info.push_back(fileinfo.getExphashMd5());
 	info.push_back(fileinfo.getExphashSha256());
@@ -69,7 +62,7 @@ bool ExportTableJsonGetter::getRecord(std::size_t structIndex, std::size_t recIn
 	}
 
 	record.clear();
-	record.push_back(numToStr(recIndex));
+	record.push_back(std::to_string(recIndex));
 	record.push_back(replaceNonprintableChars(fileinfo.getExportName(recIndex)));
 	record.push_back(fileinfo.getExportOrdinalNumberStr(recIndex, std::dec));
 	record.push_back(fileinfo.getExportAddressStr(recIndex, hexWithPrefix));
@@ -91,3 +84,4 @@ bool ExportTableJsonGetter::getFlags(std::size_t structIndex, std::size_t recInd
 }
 
 } // namespace fileinfo
+} // namespace retdec

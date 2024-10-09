@@ -9,6 +9,7 @@
 
 #include "retdec/fileformat/types/import_table/import_table.h"
 
+namespace retdec {
 namespace fileinfo {
 
 /**
@@ -17,11 +18,8 @@ namespace fileinfo {
 class ImportTable
 {
 	private:
-		const retdec::fileformat::ImportTable *table;
+		const retdec::fileformat::ImportTable *table = nullptr;
 	public:
-		ImportTable();
-		~ImportTable();
-
 		/// @name Getters
 		/// @{
 		std::size_t getNumberOfLibraries() const;
@@ -29,12 +27,17 @@ class ImportTable
 		std::string getImphashCrc32() const;
 		std::string getImphashMd5() const;
 		std::string getImphashSha256() const;
+		std::string getImphashTlsh() const;
 		const retdec::fileformat::Import* getImport(std::size_t position) const;
 		std::string getImportName(std::size_t position) const;
+		std::string getImportUsageType(std::size_t position) const;
 		std::string getImportLibraryName(std::size_t position) const;
 		std::string getImportAddressStr(std::size_t position, std::ios_base &(* format)(std::ios_base &)) const;
 		std::string getImportOrdinalNumberStr(std::size_t position, std::ios_base &(* format)(std::ios_base &)) const;
 		/// @}
+
+		std::string getMissingDepName(std::size_t position) const;
+		std::size_t getNumberOfMissingDeps() const;
 
 		/// @name Setters
 		/// @{
@@ -48,5 +51,6 @@ class ImportTable
 };
 
 } // namespace fileinfo
+} // namespace retdec
 
 #endif

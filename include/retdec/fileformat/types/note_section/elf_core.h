@@ -7,11 +7,12 @@
 #ifndef RETDEC_FILEFORMAT_TYPES_NOTE_SECTION_ELF_CORE_H
 #define RETDEC_FILEFORMAT_TYPES_NOTE_SECTION_ELF_CORE_H
 
+#include <cstdint>
 #include <string>
 #include <vector>
 #include <map>
 
-#include "retdec/utils/address.h"
+#include "retdec/common/address.h"
 
 namespace retdec {
 namespace fileformat {

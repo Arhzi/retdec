@@ -27,8 +27,7 @@ std::map<Module*, DebugFormat> DebugFormatProvider::_module2debug;
 
 /**
  * Create and add to provider a debug info for the given module @a m, file
- * image @a objf, pdb file path @a pdbFile, possible PE image base @a imageBase
- * and demangler @a demangler.
+ * image @a objf, pdb file path @a pdbFile, and demangler @a demangler.
  * @return Created and added debug ingo or @c nullptr if something went wrong
  *         and it was not successfully created.
  */
@@ -36,8 +35,7 @@ DebugFormat* DebugFormatProvider::addDebugFormat(
 				llvm::Module* m,
 				retdec::loader::Image* objf,
 				const std::string& pdbFile,
-				const retdec::utils::Address& imageBase,
-				retdec::demangler::CDemangler* demangler)
+				Demangler* demangler)
 {
 	if (objf == nullptr)
 	{
@@ -50,8 +48,9 @@ DebugFormat* DebugFormatProvider::addDebugFormat(
 					objf,
 					pdbFile,
 					nullptr, // symbol table -- not needed.
-					demangler,
-					imageBase));
+					demangler ? demangler->getDemangler() : nullptr
+			)
+	);
 	return &p.first->second;
 }
 

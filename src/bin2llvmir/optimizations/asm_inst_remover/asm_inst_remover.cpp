@@ -5,8 +5,6 @@
  * @copyright (c) 2017 Avast Software, licensed under the MIT license
  */
 
-#include <iostream>
-
 #include "retdec/bin2llvmir/optimizations/asm_inst_remover/asm_inst_remover.h"
 #include "retdec/bin2llvmir/providers/asm_instruction.h"
 #include "retdec/bin2llvmir/providers/names.h"
@@ -19,7 +17,7 @@ namespace bin2llvmir {
 char AsmInstructionRemover::ID = 0;
 
 static RegisterPass<AsmInstructionRemover> X(
-		"remove-asm-instrs",
+		"retdec-remove-asm-instrs",
 		"Assembly mapping instruction removal",
 		 false, // Only looks at CFG
 		 false // Analysis Pass
@@ -52,16 +50,19 @@ bool AsmInstructionRemover::run(Module& M)
 	for (auto& F : M.getFunctionList())
 	for (auto ai = AsmInstruction(&F); ai.isValid();)
 	{
-		// Set names to instructions.
+		// Set ASM addresses metadata to instructions.
 		//
-		unsigned c = 0;
+		llvm::MDNode* N = llvm::MDNode::get(
+			M.getContext(),
+			llvm::ValueAsMetadata::get(llvm::ConstantInt::get(
+				llvm::Type::getInt64Ty(M.getContext()),
+				ai.getAddress(),
+				false
+			))
+		);
 		for (auto& i : ai)
 		{
-			if (!i.getType()->isVoidTy())
-			{
-				i.setName(names::generateTempVariableName(ai.getAddress(), c));
-				++c;
-			}
+			i.setMetadata("insn.addr", N);
 		}
 
 		// Remove special instructions.

@@ -5,23 +5,25 @@
  */
 
 #include <iomanip>
-#include <iostream>
 
 #include <keystone/keystone.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/raw_ostream.h>
 
-#include "retdec/utils/address.h"
+#include "retdec/common/address.h"
 #include "retdec/utils/conversion.h"
 #include "retdec/utils/string.h"
+#include "retdec/utils/io/log.h"
+#include "retdec/utils/version.h"
 
 #include "retdec/capstone2llvmir/capstone2llvmir.h"
 
-using namespace std;
+using namespace retdec::utils;
+using namespace retdec::utils::io;
 
 // byte ptr [0x12345678], 0x11
-vector<uint8_t> CODE = retdec::utils::hexStringToBytes("80 05 78 56 34 12 11 00");
+std::vector<uint8_t> CODE = retdec::utils::hexStringToBytes("80 05 78 56 34 12 11 00");
 
 class ProgramOptions
 {
@@ -41,7 +43,12 @@ class ProgramOptions
 			{
 				std::string c = argv[i];
 
-				if (c == "-a")
+				if (c == "--version")
+				{
+					Log::info() << version::getVersionStringLong() << "\n";
+					exit(0);
+				}
+				else if (c == "-a")
 				{
 					_arch = getParamOrDie(argc, argv, i);
 					if (_arch == "arm") arch = CS_ARCH_ARM;
@@ -74,6 +81,7 @@ class ProgramOptions
 				else if (c == "-m")
 				{
 					_basicMode = getParamOrDie(argc, argv, i);
+					_useDefaultBasicMode = false;
 					if (_basicMode == "arm") basicMode = CS_MODE_ARM;
 					else if (_basicMode == "thumb") basicMode = CS_MODE_THUMB;
 					else if (_basicMode == "16") basicMode = CS_MODE_16;
@@ -109,6 +117,11 @@ class ProgramOptions
 					printHelpAndDie();
 				}
 			}
+
+			if (_useDefaultBasicMode)
+			{
+				basicMode = getDefaultBasicModeFromArch(arch);
+			}
 		}
 
 		std::string getParamOrDie(int argc, char *argv[], int& i)
@@ -124,23 +137,49 @@ class ProgramOptions
 			}
 		}
 
+		cs_mode getDefaultBasicModeFromArch(cs_arch a)
+		{
+			switch (a)
+			{
+				case CS_ARCH_ARM: return CS_MODE_ARM; // CS_MODE_THUMB
+				case CS_ARCH_ARM64: return CS_MODE_ARM;
+				case CS_ARCH_MIPS: return CS_MODE_MIPS32; // CS_MODE_MIPS{32, 64, 32R6}
+				case CS_ARCH_X86: return CS_MODE_32; // CS_MODE_{16, 32, 64}
+				case CS_ARCH_PPC: return CS_MODE_32;
+				case CS_ARCH_SPARC: return CS_MODE_LITTLE_ENDIAN; // 0
+				case CS_ARCH_SYSZ: return CS_MODE_LITTLE_ENDIAN;
+				case CS_ARCH_XCORE: return CS_MODE_LITTLE_ENDIAN;
+				case CS_ARCH_MAX:
+				case CS_ARCH_ALL:
+				default:
+					Log::error() << "Can not get Capstone arch to default Capstone basic mode." << std::endl;
+					exit(1);
+			}
+		}
+
 		void dump()
 		{
-			cout << endl;
-			cout << "Program Options:" << endl;
-			cout << "\t" << "arch   : " << arch << " (" << _arch << ")" << endl;
-			cout << "\t" << "base   : " << hex << base << " (" << _base << ")" << endl;
-			cout << "\t" << "code   : " << retdec::utils::bytesToHexString(code) << " (" << _code << ")" << endl;
-			cout << "\t" << "asm text : " << text << endl;
-			cout << "\t" << "b mode : " << hex << basicMode << " (" << _basicMode << ")" << endl;
-			cout << "\t" << "e mode : " << hex << extraMode << " (" << _extraMode << ")" << endl;
-			cout << "\t" << "out    : " << outFile << endl;
-			cout << endl;
+			std::string tmp;
+			retdec::utils::bytesToHexString(code, tmp, 0, 0, false, true);
+			Log::info() << std::endl;
+			Log::info() << "Program Options:" << std::endl;
+			Log::info() << "\t" << "arch   : " << arch << " (" << _arch << ")" << std::endl;
+			Log::info() << "\t" << "base   : " << std::hex << base << " (" << _base << ")" << std::endl;
+			Log::info() << "\t" << "code   : " << tmp << " (" << _code << ")" << std::endl;
+			Log::info() << "\t" << "asm text : " << text << std::endl;
+			Log::info() << "\t" << "b mode : " << std::hex << basicMode << " (" << _basicMode << ")" << std::endl;
+			Log::info() << "\t" << "e mode : " << std::hex << extraMode << " (" << _extraMode << ")" << std::endl;
+			Log::info() << "\t" << "out    : " << outFile << std::endl;
+			Log::info() << std::endl;
 		}
 
 		void printHelpAndDie()
 		{
-			cout << _programName << ":\n"
+			std::string tmp;
+			retdec::utils::bytesToHexString(CODE, tmp, 0, 0, false, true);
+			Log::info() << _programName << ":\n"
+				"\t-h|--help Show this help.\n"
+				"\t--version Show RetDec version.\n"
 				"\t-a name   Set architecture name.\n"
 				"\t          Possible values: arm, arm64, mips, x86, ppc, sparc, sysz, xcore\n"
 				"\t          Default value: x86.\n"
@@ -148,7 +187,7 @@ class ProgramOptions
 				"\t          Default value 0x1000.\n"
 				"\t-c code   Binary data to translate in hexadecimal format.\n"
 				"\t          E.g. \"0b 84 d1 a0 80 60 40\" or \"0b84d1a0806040\".\n"
-				"\t          Default value: \"" << retdec::utils::bytesToHexString(CODE) << "\"\n"
+				"\t          Default value: \"" << tmp << "\"\n"
 				"\t-t asm    Assembly text to assemble, disassemble and dump.\n"
 				"\t          Most of the time, this is more convenient than -c option.\n"
 				"\t-m mode   Capstone basic mode to use.\n"
@@ -167,19 +206,20 @@ class ProgramOptions
 	public:
 		cs_arch arch = CS_ARCH_X86;
 		uint64_t base = 0x1000;
-		vector<uint8_t> code = CODE;
-		string text;
+		std::vector<uint8_t> code = CODE;
+		std::string text;
 		cs_mode basicMode = CS_MODE_32;
 		cs_mode extraMode = CS_MODE_LITTLE_ENDIAN;
-		string outFile = "-"; // "-" == stdout for llvm::raw_fd_ostream.
+		std::string outFile = "-"; // "-" == stdout for llvm::raw_fd_ostream.
 
 	private:
-		string _programName = "capstone2llvmir";
-		string _arch;
-		string _base;
-		string _code;
-		string _basicMode;
-		string _extraMode;
+		std::string _programName = "capstone2llvmir";
+		std::string _arch;
+		std::string _base;
+		std::string _code;
+		std::string _basicMode;
+		std::string _extraMode;
+		bool _useDefaultBasicMode = true;
 };
 
 /**
@@ -191,9 +231,9 @@ void printVersion()
 	int minor = 0;
 	int version = cs_version(&major, &minor);
 
-	cout << endl;
-	cout << "Capstone version: " << version << " (major: " << major
-			<< ", minor: " << minor << ")" << endl;
+	Log::info() << std::endl;
+	Log::info() << "Capstone version: " << version << " (major: " << major
+			<< ", minor: " << minor << ")" << std::endl;
 }
 
 ks_arch capstoneArchToKeystoneArch(cs_arch a)
@@ -211,7 +251,7 @@ ks_arch capstoneArchToKeystoneArch(cs_arch a)
 		case CS_ARCH_MAX:
 		case CS_ARCH_ALL:
 		default:
-			cerr << "Can not convert Capstone arch to Keystone arch." << endl;
+			Log::error() << "Can not convert Capstone arch to Keystone arch." << std::endl;
 			exit(1);
 	}
 }
@@ -238,6 +278,12 @@ ks_mode capstoneModeBasicToKeystoneMode(cs_arch a, cs_mode m)
 	{
 		return KS_MODE_THUMB;
 	}
+	else if (a == CS_ARCH_ARM64 && m == CS_MODE_ARM) // 0
+	{
+		return KS_MODE_LITTLE_ENDIAN;
+		// In the keystone examples, only little endian mode is used with CS_ARCH_ARM64
+		// test_ks(KS_ARCH_ARM64, KS_MODE_LITTLE_ENDIAN, "ldr w1, [sp, #0x8]", 0);
+	}
 	else if (a == CS_ARCH_MIPS && m == CS_MODE_MIPS3) // 1 << 5
 	{
 		return KS_MODE_MIPS3;
@@ -248,7 +294,7 @@ ks_mode capstoneModeBasicToKeystoneMode(cs_arch a, cs_mode m)
 	}
 	else
 	{
-		cerr << "Can not convert Capstone basic mode to Keystone mode." << endl;
+		Log::error() << "Can not convert Capstone basic mode to Keystone mode." << std::endl;
 		exit(1);
 	}
 }
@@ -281,7 +327,7 @@ ks_mode capstoneModeExtraToKeystoneMode(cs_arch a, cs_mode m)
 	}
 	else
 	{
-		cerr << "Can not convert Capstone extra mode to Keystone mode." << endl;
+		Log::error() << "Can not convert Capstone extra mode to Keystone mode." << std::endl;
 		exit(1);
 	}
 }
@@ -300,7 +346,7 @@ void assemble(ProgramOptions& po)
 	if (ks_open(arch, basic | extra, &ks) != KS_ERR_OK)
 	{
 		ks_err err = ks_errno(ks);
-		cerr << "Keystone Error: " << ks_strerror(err) << endl;
+		Log::error() << Log::Error << "Keystone: " << ks_strerror(err) << std::endl;
 		exit(1);
 	}
 
@@ -311,7 +357,7 @@ void assemble(ProgramOptions& po)
 	if (ks_asm(ks, po.text.data(), po.base, &enc, &sz, &cnt) != KS_ERR_OK)
 	{
 		ks_err err = ks_errno(ks);
-		cerr << "Keystone Error: " << ks_strerror(err) << endl;
+		Log::error() << Log::Error << "Keystone: " << ks_strerror(err) << std::endl;
 		exit(1);
 	}
 
@@ -326,7 +372,7 @@ void assemble(ProgramOptions& po)
 	if (ks_close(ks) != KS_ERR_OK)
 	{
 		ks_err err = ks_errno(ks);
-		cerr << "Keystone Error: " << ks_strerror(err) << endl;
+		Log::error() << Log::Error << "Keystone : " << ks_strerror(err) << std::endl;
 		exit(1);
 	}
 }
@@ -369,12 +415,12 @@ int main(int argc, char *argv[])
 	}
 	catch (const BaseError& e)
 	{
-		std::cerr << e.what() << std::endl;
+		Log::error() << e.what() << std::endl;
 		assert(false);
 	}
 	catch (...)
 	{
-		std::cerr << "Some unhandled exception" << std::endl;
+		Log::error() << "Some unhandled exception" << std::endl;
 	}
 
 	std::error_code ec;

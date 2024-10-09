@@ -7,6 +7,8 @@
 #ifndef TESTS_BIN2LLVMIR_UTILS_LLVMIR_TESTS_H
 #define TESTS_BIN2LLVMIR_UTILS_LLVMIR_TESTS_H
 
+#include <regex>
+
 #include <gtest/gtest.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/LegacyPassManager.h>
@@ -18,15 +20,19 @@
 #include <llvm/Support/SourceMgr.h>
 #include <llvm/Support/raw_ostream.h>
 
+#include "retdec/bin2llvmir/analyses/symbolic_tree.h"
 #include "retdec/bin2llvmir/utils/llvm.h"
 #include "retdec/fileformat/file_format/raw_data/raw_data_format.h"
 #include "retdec/loader/loader.h"
+#include "retdec/bin2llvmir/providers/abi/abi.h"
 #include "retdec/bin2llvmir/providers/asm_instruction.h"
+#include "retdec/bin2llvmir/providers/calling_convention/calling_convention.h"
 #include "retdec/bin2llvmir/providers/config.h"
 #include "retdec/bin2llvmir/providers/debugformat.h"
 #include "retdec/bin2llvmir/providers/demangler.h"
 #include "retdec/bin2llvmir/providers/fileimage.h"
 #include "retdec/bin2llvmir/providers/lti.h"
+#include "retdec/bin2llvmir/providers/names.h"
 #include "retdec/bin2llvmir/utils/debug.h"
 #include "retdec/utils/string.h"
 
@@ -53,12 +59,16 @@ class LlvmIrTests : public ::testing::Test
 		 */
 		void clearAllStaticData()
 		{
+			AbiProvider::clear();
+			AsmInstruction::clear();
 			ConfigProvider::clear();
 			DebugFormatProvider::clear();
 			DemanglerProvider::clear();
 			FileImageProvider::clear();
-			AsmInstruction::clear();
 			LtiProvider::clear();
+			NamesProvider::clear();
+			SymbolicTree::clear();
+			CallingConventionProvider::clear();
 		}
 
 		/**
@@ -116,12 +126,28 @@ class LlvmIrTests : public ::testing::Test
 		}
 
 		/**
+		 * Remove alignment of LLVM IR's load/store instructions.
+		 */
+		std::string removeAlignment(const std::string& code)
+		{
+			std::regex e(", align [0-9]+");
+			return std::regex_replace(code, e, "");;
+		}
+
+		/**
 		 * Check if the IR string from @c actual LLVM module is the same
 		 * as @c expected
 		 * LLVM IR string.
 		 * @param expected LLVM IR string.
+		 * @param removeComments Should the comments be removed before
+		 *                       comparison?
+		 * @param removeAlign Should the load/store alignment be removed before
+		 *                    comparison?
 		 */
-		void checkModuleAgainstExpectedIr(std::string& expected)
+		void checkModuleAgainstExpectedIr(
+				std::string& expected,
+				bool removeComments = true,
+				bool removeAlign = true)
 		{
 			llvm::LLVMContext expectedContext;
 			auto expectedModule = _parseInput(expected, expectedContext);
@@ -134,8 +160,17 @@ class LlvmIrTests : public ::testing::Test
 			ASSERT_FALSE(verifyModule(*module))
 				<< "actual module is not valid:\n" << actualStr;
 
-			expectedStr = retdec::utils::removeComments(expectedStr, ';');
-			actualStr = retdec::utils::removeComments(actualStr, ';');
+			if (removeComments)
+			{
+				expectedStr = retdec::utils::removeComments(expectedStr, ';');
+				actualStr = retdec::utils::removeComments(actualStr, ';');
+			}
+
+			if (removeAlign)
+			{
+				expectedStr = removeAlignment(expectedStr);
+				actualStr = removeAlignment(actualStr);
+			}
 
 			EXPECT_TRUE(
 				retdec::utils::removeWhitespace(expectedStr) ==

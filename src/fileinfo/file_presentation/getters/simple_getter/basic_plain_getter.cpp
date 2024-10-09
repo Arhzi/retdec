@@ -11,6 +11,7 @@
 using namespace retdec::utils;
 using namespace retdec::fileformat;
 
+namespace retdec {
 namespace fileinfo {
 
 /**
@@ -22,14 +23,6 @@ BasicPlainGetter::BasicPlainGetter(FileInformation &fileInfo) : SimpleGetter(fil
 
 }
 
-/**
- * Destructor
- */
-BasicPlainGetter::~BasicPlainGetter()
-{
-
-}
-
 std::size_t BasicPlainGetter::loadInformation(std::vector<std::string> &desc, std::vector<std::string> &info) const
 {
 	const char * loaderErrorUserFriendly = fileinfo.getLoaderErrorInfo().loaderErrorUserFriendly;
@@ -37,6 +30,7 @@ std::size_t BasicPlainGetter::loadInformation(std::vector<std::string> &desc, st
 	desc.clear();
 	info.clear();
 
+	desc.push_back("Telfhash                 : ");
 	desc.push_back("CRC32                    : ");
 	desc.push_back("MD5                      : ");
 	desc.push_back("SHA256                   : ");
@@ -46,7 +40,10 @@ std::size_t BasicPlainGetter::loadInformation(std::vector<std::string> &desc, st
 
 	// Save the title for loader error (if there was a loader error detected)
 	if(loaderErrorUserFriendly != nullptr)
+	{
 		desc.push_back("Loader error             : ");
+		desc.push_back("Loadable anyway          : ");
+	}
 
 	desc.push_back("Architecture             : ");
 	desc.push_back("Endianness               : ");
@@ -57,6 +54,7 @@ std::size_t BasicPlainGetter::loadInformation(std::vector<std::string> &desc, st
 	desc.push_back("Entry point section index: ");
 	desc.push_back("Bytes on entry point     : ");
 
+	info.push_back(fileinfo.getTelfhash());
 	info.push_back(fileinfo.getCrc32());
 	info.push_back(fileinfo.getMd5());
 	info.push_back(fileinfo.getSha256());
@@ -65,8 +63,11 @@ std::size_t BasicPlainGetter::loadInformation(std::vector<std::string> &desc, st
 	info.push_back(fileinfo.getFileType());
 
 	// Save the text loader error
-	if(loaderErrorUserFriendly != nullptr)
+	if (loaderErrorUserFriendly != nullptr)
+	{
 		info.push_back(loaderErrorUserFriendly);
+		info.push_back(fileinfo.getLoaderErrorInfo().isLoadableAnyway ? "Yes" : "No");
+	}
 
 	info.push_back(fileinfo.getTargetArchitecture());
 	info.push_back(fileinfo.getEndianness());
@@ -102,3 +103,4 @@ std::size_t BasicPlainGetter::loadInformation(std::vector<std::string> &desc, st
 }
 
 } // namespace fileinfo
+} // namespace retdec

@@ -12,7 +12,10 @@ set(DOXYGEN_WARNINGS "YES")
 set(DOXYGEN_EXTRACT_PRIVATE "YES")
 set(DOXYGEN_EXTRACT_LOCAL_CLASSES "YES")
 set(DOXYGEN_INTERNAL_DOCS "YES")
-set(DOXYGEN_EXCLUDE_PATTERNS "")
+set(DOXYGEN_EXCLUDE "")
+set(DOXYGEN_EXCLUDE_PATTERNS
+	"*/symbolic_tree_match.h */ir.cpp */ir.h" # Doxygen is not dealing with this.
+)
 set(DOXYGEN_EXCLUDE_SYMBOLS "")
 set(DOXYGEN_ENABLED_SECTIONS "internal")
 set(DOXYGEN_INCLUDE_GRAPH "NO")
@@ -29,8 +32,22 @@ add_custom_target(doc ALL
 	COMMENT "Generating API documentation with Doxygen" VERBATIM
 )
 
+# Show doxygen log file after the documentation is generated.
+add_custom_command(TARGET doc
+	POST_BUILD
+	COMMAND "${CMAKE_COMMAND}" "-DDOXYGEN_LOG=${DOXYGEN_LOG}" -P "${CMAKE_CURRENT_SOURCE_DIR}/show_doxygen_log.cmake"
+)
+
 # Cleanup.
-set_directory_properties(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES "${DOXYGEN_OUTPUT_DIR}")
+set_directory_properties(
+	PROPERTIES
+	ADDITIONAL_MAKE_CLEAN_FILES "${DOXYGEN_OUTPUT_DIR}"
+)
 
 # Install.
-install(DIRECTORY "${DOXYGEN_OUTPUT_DIR}" DESTINATION share/retdec/doc)
+install(
+	DIRECTORY
+		${DOXYGEN_OUTPUT_DIR}
+	DESTINATION
+		${RETDEC_INSTALL_DOC_DIR}
+)

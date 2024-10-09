@@ -7,6 +7,7 @@
 #ifndef RETDEC_FILEFORMAT_TYPES_IMPORT_TABLE_IMPORT_H
 #define RETDEC_FILEFORMAT_TYPES_IMPORT_TABLE_IMPORT_H
 
+#include <cstdint>
 #include <string>
 
 namespace retdec {
@@ -17,30 +18,49 @@ namespace fileformat {
  */
 class Import
 {
-	private:
-		std::string name;                 ///< import name
-		unsigned long long libraryIndex;  ///< index of library from which is import imported
-		unsigned long long address;       ///< address of import
-		unsigned long long ordinalNumber; ///< ordinal number
-		bool ordinalNumberIsValid;        ///< @c true if ordinal number is valid
 	public:
-		Import();
-		~Import();
+		enum class UsageType
+		{
+			UNKNOWN,
+			FUNCTION,
+			OBJECT,
+			FILE
+		};
+
+	private:
+		std::string name;
+		std::uint64_t libraryIndex = 0;
+		std::uint64_t address = 0;
+		std::uint64_t ordinalNumber = 0;
+		bool ordinalNumberIsValid = false;
+		UsageType usageType = UsageType::UNKNOWN;
+	public:
+		virtual ~Import() = default;
 
 		/// @name Getters
 		/// @{
-		std::string getName() const;
-		unsigned long long getLibraryIndex() const;
-		unsigned long long getAddress() const;
-		bool getOrdinalNumber(unsigned long long &importOrdinalNumber) const;
+		const std::string& getName() const;
+		std::uint64_t getLibraryIndex() const;
+		std::uint64_t getAddress() const;
+		bool getOrdinalNumber(std::uint64_t &importOrdinalNumber) const;
+		Import::UsageType getUsageType() const;
+		/// @}
+
+		/// @name Usage type queries
+		/// @{
+		bool isUnknown() const;
+		bool isFunction() const;
+		bool isObject() const;
+		bool isFile() const;
 		/// @}
 
 		/// @name Setters
 		/// @{
 		void setName(std::string importName);
-		void setLibraryIndex(unsigned long long importLibraryIndex);
-		void setAddress(unsigned long long importAddress);
-		void setOrdinalNumber(unsigned long long importOrdinalNumber);
+		void setLibraryIndex(std::uint64_t importLibraryIndex);
+		void setAddress(std::uint64_t importAddress);
+		void setOrdinalNumber(std::uint64_t importOrdinalNumber);
+		void setUsageType(Import::UsageType importUsageType);
 		/// @}
 
 		/// @name Other methods

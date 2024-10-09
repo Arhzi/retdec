@@ -8,7 +8,9 @@
 #define FILEINFO_FILE_DETECTOR_RAW_DATA_DETECTOR_H
 
 #include "fileinfo/file_detector/file_detector.h"
+#include "retdec/fileformat/file_format/raw_data/raw_data_format.h"
 
+namespace retdec {
 namespace fileinfo {
 
 /**
@@ -34,10 +36,14 @@ class RawDataDetector : public FileDetector
 		/// @}
 
 	public:
-		RawDataDetector(std::string pathToInputFile, FileInformation &finfo, retdec::cpdetect::DetectParams &searchPar, retdec::fileformat::LoadFlags loadFlags);
-		virtual ~RawDataDetector() override;
+		RawDataDetector(
+				std::string pathToInputFile,
+				FileInformation &finfo,
+				retdec::cpdetect::DetectParams &searchPar,
+				retdec::fileformat::LoadFlags loadFlags);
 };
 
 } // namespace fileinfo
+} // namespace retdec
 
 #endif

@@ -10,6 +10,7 @@
 using namespace retdec::utils;
 using namespace retdec::fileformat;
 
+namespace retdec {
 namespace fileinfo {
 
 namespace
@@ -51,13 +52,6 @@ ElfAuxVPlainGetter::ElfAuxVPlainGetter(
 	loadRecords();
 }
 
-/**
- * Destructor
- */
-ElfAuxVPlainGetter::~ElfAuxVPlainGetter()
-{
-}
-
 std::size_t ElfAuxVPlainGetter::getBasicInfo(
 		std::size_t structIndex,
 		std::vector<std::string> &desc,
@@ -73,7 +67,7 @@ std::size_t ElfAuxVPlainGetter::getBasicInfo(
 
 	const auto& auxV = fileinfo.getElfCoreInfo().getAuxVector();
 	desc.push_back("Number of entries: ");
-	info.push_back(numToStr(auxV.size()));
+	info.push_back(std::to_string(auxV.size()));
 
 	return info.size();
 }
@@ -92,9 +86,9 @@ bool ElfAuxVPlainGetter::loadRecord(
 	auto& entry = fileinfo.getElfCoreInfo().getAuxVector()[recIndex];
 
 	record.clear();
-	record.push_back(numToStr(recIndex));
+	record.push_back(std::to_string(recIndex));
 	record.push_back(entry.first);
-	record.push_back(toHex(entry.second, true));
+	record.push_back(intToHexString(entry.second, true));
 
 	return true;
 }
@@ -116,3 +110,4 @@ bool ElfAuxVPlainGetter::getFlagDescriptors(
 }
 
 } // namespace fileinfo
+} // namespace retdec

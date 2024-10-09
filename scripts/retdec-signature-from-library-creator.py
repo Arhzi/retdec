@@ -5,14 +5,12 @@
 from __future__ import print_function
 
 import argparse
+import importlib
+import os
 import shutil
 import sys
-import os
-import subprocess
 import tempfile
 
-import importlib
-config = importlib.import_module('retdec-config')
 utils = importlib.import_module('retdec-utils')
 utils.check_python_version()
 utils.ensure_script_is_being_run_from_installed_retdec()
@@ -20,6 +18,10 @@ utils.ensure_script_is_being_run_from_installed_retdec()
 CmdRunner = utils.CmdRunner
 sys.stdout = utils.Unbuffered(sys.stdout)
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+AR = os.path.join(SCRIPT_DIR, 'retdec-ar-extractor')
+BIN2PAT = os.path.join(SCRIPT_DIR, 'retdec-bin2pat')
+PAT2YARA = os.path.join(SCRIPT_DIR, 'retdec-pat2yara')
 
 def parse_args(args):
     parser = argparse.ArgumentParser(description=__doc__,
@@ -82,6 +84,7 @@ class SigFromLib:
 
         dir_name = os.path.dirname(os.path.abspath(self.args.output))
         self.tmp_dir_path = tempfile.mkdtemp(dir=dir_name)
+        self.object_list_path = os.path.join(self.tmp_dir_path, 'object-list.txt')
 
         if self.args.ignore_nops:
             self.ignore_nop = '--ignore-nops'
@@ -92,7 +95,6 @@ class SigFromLib:
         if not self._check_arguments():
             return 1
 
-        cmd = CmdRunner()
         pattern_files = []
         object_dirs = []
 
@@ -112,7 +114,7 @@ class SigFromLib:
             os.makedirs(object_dir, exist_ok=True)
 
             # Extract all files to temporary folder.
-            cmd.run_cmd([config.AR, lib_path, '--extract', '--output', object_dir], discard_stdout=True, discard_stderr=True)
+            CmdRunner.run_cmd([AR, lib_path, '--extract', '--output', object_dir], discard_stdout=True, discard_stderr=True)
 
             # List all extracted objects.
             objects = []
@@ -126,7 +128,10 @@ class SigFromLib:
             # Extract patterns from library.
             pattern_file = os.path.join(self.tmp_dir_path, lib_name) + '.pat'
             pattern_files.append(pattern_file)
-            _, result, _ = cmd.run_cmd([config.BIN2PAT, '-o', pattern_file] + objects, discard_stdout=True, discard_stderr=True)
+            with open(self.object_list_path, 'w') as object_list:
+                for item in objects:
+                    object_list.write(item + '\n')
+            _, result, _ = CmdRunner.run_cmd([BIN2PAT, '-o', pattern_file, '-l', self.object_list_path], discard_stdout=True, discard_stderr=True)
 
             if result != 0:
                 self.print_error_and_cleanup('utility bin2pat failed when processing %s' % lib_path)
@@ -146,13 +151,13 @@ class SigFromLib:
             return 0
 
         # Create final .yara file from .pat files.
-        pat2yara_args = [config.PAT2YARA] + pattern_files + ['--min-pure', str(self.args.min_pure), '-o', self.args.output]
+        pat2yara_args = [PAT2YARA] + pattern_files + ['--min-pure', str(self.args.min_pure), '-o', self.args.output]
         if self.args.logfile:
             pat2yara_args.extend(['-l', self.args.output + '.log'])
         if self.ignore_nop:
             pat2yara_args.extend([self.ignore_nop, str(self.args.ignore_nops)])
 
-        _, result, _ = cmd.run_cmd(pat2yara_args, discard_stdout=True, discard_stderr=True)
+        _, result, _ = CmdRunner.run_cmd(pat2yara_args, discard_stdout=True, discard_stderr=True)
 
         if result != 0:
             self.print_error_and_cleanup('utility pat2yara failed')

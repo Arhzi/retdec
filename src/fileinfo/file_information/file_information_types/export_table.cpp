@@ -7,23 +7,8 @@
 #include "fileinfo/file_information/file_information_types/export_table.h"
 #include "fileinfo/file_information/file_information_types/type_conversions.h"
 
+namespace retdec {
 namespace fileinfo {
-
-/**
- * Constructor
- */
-ExportTable::ExportTable() : table(nullptr)
-{
-
-}
-
-/**
- * Destructor
- */
-ExportTable::~ExportTable()
-{
-
-}
 
 /**
  * Get number of exports in table
@@ -61,6 +46,11 @@ std::string ExportTable::getExphashSha256() const
 	return table ? table->getExphashSha256() : "";
 }
 
+std::string ExportTable::getDllName() const
+{
+	return table ? table->getDllName() : "";
+}
+
 /**
  * Get export name
  * @param position Index of selected export from table (indexed from 0)
@@ -92,7 +82,7 @@ std::string ExportTable::getExportAddressStr(std::size_t position, std::ios_base
  */
 std::string ExportTable::getExportOrdinalNumberStr(std::size_t position, std::ios_base &(* format)(std::ios_base &)) const
 {
-	unsigned long long ordinal;
+	std::uint64_t ordinal;
 	const auto *record = table ? table->getExport(position) : nullptr;
 	return record && record->getOrdinalNumber(ordinal) ? getNumberAsString(ordinal, format) : "";
 }
@@ -116,3 +106,4 @@ bool ExportTable::hasRecords() const
 }
 
 } // namespace fileinfo
+} // namespace retdec

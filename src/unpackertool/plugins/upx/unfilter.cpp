@@ -5,10 +5,11 @@
  */
 
 #include <memory>
+#include <algorithm>
 
 #include "unpackertool/plugins/upx/unfilter.h"
 
-using namespace retdec::unpacker;
+using namespace retdec::utils;
 
 namespace retdec {
 namespace unpackertool {
@@ -50,6 +51,7 @@ bool Unfilter::run(DynamicBuffer& unpackedData, std::uint32_t filterId, std::uin
 			unfilter = std::make_unique<Unfilter49>();
 			break;
 		case FILTER_50:
+		case FILTER_51: // 0x51 is just big-endian variant of 0x50 which is already handled by DynamicBuffer
 			unfilter = std::make_unique<Unfilter50>();
 			break;
 		case FILTER_D0:

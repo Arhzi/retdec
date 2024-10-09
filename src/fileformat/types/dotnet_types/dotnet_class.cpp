@@ -6,6 +6,7 @@
 
 #include "retdec/utils/string.h"
 #include "retdec/fileformat/types/dotnet_types/dotnet_class.h"
+#include <cstdint>
 
 using namespace retdec::utils;
 
@@ -47,7 +48,7 @@ const TypeDef* DotnetClass::getRawTypeDef() const
 		return nullptr;
 	}
 
-	return mpark::get<const TypeDef*>(rawRecord);
+	return std::get<const TypeDef*>(rawRecord);
 }
 
 /**
@@ -61,7 +62,7 @@ const TypeRef* DotnetClass::getRawTypeRef() const
 		return nullptr;
 	}
 
-	return mpark::get<const TypeRef*>(rawRecord);
+	return std::get<const TypeRef*>(rawRecord);
 }
 
 /**
@@ -102,7 +103,7 @@ std::string DotnetClass::getNameWithParentClassIndex() const
 		return name;
 	}
 
-	return name + "." + numToStr(parent->getIndex() - 1);
+	return name + "." + std::to_string(parent->getIndex() - 1);
 }
 
 /**
@@ -140,7 +141,7 @@ const std::string& DotnetClass::getLibName() const
 	{
 		return parent->getLibName();
 	}
-	
+
 	return libName;
 }
 
@@ -299,7 +300,7 @@ MetadataTableType DotnetClass::getRecordType() const
  * Sets the raw metadata table record for this class.
  * @param rRecord Raw metadata table record.
  */
-void DotnetClass::setRawRecord(mpark::variant<const TypeDef*, const TypeRef*> rRecord)
+void DotnetClass::setRawRecord(std::variant<const TypeDef*, const TypeRef*> rRecord)
 {
 	rawRecord = rRecord;
 }
@@ -410,6 +411,18 @@ bool DotnetClass::isAbstract() const
 bool DotnetClass::isSealed() const
 {
 	return sealed;
+}
+
+bool DotnetClass::isNested() const
+{
+	const TypeDef* row = getRawTypeDef();
+	if (!row)
+	{
+		return false;
+	}
+	std::uint32_t flags = getRawTypeDef()->flags;
+	return (flags & TypeVisibilityMask) != TypeNotPublic &&
+			(flags & TypeVisibilityMask) != TypePublic;
 }
 
 /**

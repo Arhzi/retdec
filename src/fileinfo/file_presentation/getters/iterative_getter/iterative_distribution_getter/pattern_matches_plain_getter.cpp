@@ -11,6 +11,7 @@
 using namespace retdec::utils;
 using namespace retdec::fileformat;
 
+namespace retdec {
 namespace fileinfo {
 
 namespace
@@ -42,14 +43,6 @@ PatternMatchesPlainGetter::PatternMatchesPlainGetter(FileInformation &fileInfo, 
 	loadRecords();
 }
 
-/**
- * Destrcutor
- */
-PatternMatchesPlainGetter::~PatternMatchesPlainGetter()
-{
-
-}
-
 std::size_t PatternMatchesPlainGetter::getBasicInfo(std::size_t structIndex, std::vector<std::string> &desc, std::vector<std::string> &info) const
 {
 	desc.clear();
@@ -67,10 +60,10 @@ bool PatternMatchesPlainGetter::loadRecord(std::size_t structIndex, std::size_t 
 	record.clear();
 	record.push_back(" ");
 	unsigned long long val;
-	record.push_back(matches[recIndex].getOffset(val) ? numToStr(val, hexWithPrefix) : "");
-	record.push_back(matches[recIndex].getAddress(val) ? numToStr(val, hexWithPrefix) : "");
-	record.push_back(matches[recIndex].getDataSize(val) ? numToStr(val, hexWithPrefix) : "");
-	record.push_back(matches[recIndex].getEntrySize(val) ? numToStr(val, std::dec) : "");
+	record.push_back(matches[recIndex].getOffset(val) ? intToHexString(val) : "");
+	record.push_back(matches[recIndex].getAddress(val) ? intToHexString(val) : "");
+	record.push_back(matches[recIndex].getDataSize(val) ? intToHexString(val) : "");
+	record.push_back(matches[recIndex].getEntrySize(val) ? std::to_string(val) : "");
 	record.push_back(matches[recIndex].isInteger() ? "yes" : "no");
 	record.push_back(matches[recIndex].isFloatingPoint() ? "yes" : "no");
 
@@ -91,3 +84,4 @@ bool PatternMatchesPlainGetter::getFlagDescriptors(std::size_t structIndex, std:
 }
 
 } // namespace fileinfo
+} // namespace retdec

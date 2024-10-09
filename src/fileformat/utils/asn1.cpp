@@ -201,8 +201,8 @@ void Asn1Object::init()
 
 	// First number from OID is stored as 40*X + Y where OID is 'X.Y'
 	auto first = contentData[0];
-	_identifier += retdec::utils::numToStr(first / 40) + '.';
-	_identifier += retdec::utils::numToStr(first % 40);
+	_identifier += std::to_string(first / 40) + '.';
+	_identifier += std::to_string(first % 40);
 	if (contentData.size() != 1)
 		_identifier += '.';
 
@@ -216,7 +216,7 @@ void Asn1Object::init()
 			continue;
 		}
 
-		_identifier += retdec::utils::numToStr(subident);
+		_identifier += std::to_string(subident);
 		if (itr + 1 != contentData.end())
 			_identifier += '.';
 		subident = 0;
@@ -247,8 +247,13 @@ void Asn1Sequence::init()
 		if (element == nullptr)
 			return;
 
-		assert(element->getLength() <= contentData.size() && "https://github.com/avast-tl/retdec/issues/256");
-		contentData.erase(contentData.begin(), contentData.begin() + element->getLength());
+		// Looks like size of the created element might be greater than size of
+		// the data it was created from.
+		auto endIt = element->getLength() >= contentData.size()
+				? contentData.end()
+				: contentData.begin() + element->getLength();
+
+		contentData.erase(contentData.begin(), endIt);
 		_elements.push_back(std::move(element));
 	}
 }

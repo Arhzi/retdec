@@ -12,6 +12,7 @@
 using namespace retdec::utils;
 using namespace retdec::fileformat;
 
+namespace retdec {
 namespace fileinfo {
 
 /**
@@ -31,14 +32,6 @@ TypeRefTableJsonGetter::TypeRefTableJsonGetter(FileInformation &fileInfo) : Iter
 	commonHeaderElements.push_back("libraryName");
 }
 
-/**
- * Destructor
- */
-TypeRefTableJsonGetter::~TypeRefTableJsonGetter()
-{
-
-}
-
 std::size_t TypeRefTableJsonGetter::getBasicInfo(std::size_t structIndex, std::vector<std::string> &desc, std::vector<std::string> &info) const
 {
 	if(structIndex >= numberOfStructures || !fileinfo.hasDotnetTypeRefTableRecords())
@@ -53,7 +46,7 @@ std::size_t TypeRefTableJsonGetter::getBasicInfo(std::size_t structIndex, std::v
 	desc.push_back("crc32");
 	desc.push_back("md5");
 	desc.push_back("sha256");
-	info.push_back(numToStr(fileinfo.getNumberOfStoredDotnetImportedClasses()));
+	info.push_back(std::to_string(fileinfo.getNumberOfStoredDotnetImportedClasses()));
 	info.push_back(fileinfo.getDotnetTypeRefhashCrc32());
 	info.push_back(fileinfo.getDotnetTypeRefhashMd5());
 	info.push_back(fileinfo.getDotnetTypeRefhashSha256());
@@ -69,7 +62,7 @@ bool TypeRefTableJsonGetter::getRecord(std::size_t structIndex, std::size_t recI
 	}
 
 	record.clear();
-	record.push_back(numToStr(recIndex));
+	record.push_back(std::to_string(recIndex));
 	record.push_back(replaceNonprintableChars(fileinfo.getDotnetImportedClassNestedName(recIndex)));
 	record.push_back(replaceNonprintableChars(fileinfo.getDotnetImportedClassNameSpace(recIndex)));
 	record.push_back(replaceNonprintableChars(fileinfo.getDotnetImportedClassLibName(recIndex)));
@@ -91,3 +84,4 @@ bool TypeRefTableJsonGetter::getFlags(std::size_t structIndex, std::size_t recIn
 }
 
 } // namespace fileinfo
+} // namespace retdec

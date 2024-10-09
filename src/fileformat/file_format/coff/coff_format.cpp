@@ -7,10 +7,11 @@
 #include <cstdint>
 #include <system_error>
 
-#include <pelib/PeLibInc.h>
+#include <llvm/Object/COFF.h>
 
 #include "retdec/utils/string.h"
 #include "retdec/fileformat/file_format/coff/coff_format.h"
+#include "retdec/pelib/PeLibInc.h"
 
 using namespace retdec::utils;
 using namespace llvm;
@@ -214,7 +215,41 @@ Symbol::UsageType getSymbolUsageType(std::uint8_t storageClass, std::uint8_t com
  * @param pathToFile Path to input file
  * @param loadFlags Load flags
  */
-CoffFormat::CoffFormat(std::string pathToFile, LoadFlags loadFlags) : FileFormat(pathToFile, loadFlags), fileBuffer(MemoryBuffer::getFile(Twine(pathToFile)))
+CoffFormat::CoffFormat(std::string pathToFile, LoadFlags loadFlags) :
+		FileFormat(pathToFile, loadFlags),
+		fileBuffer(MemoryBuffer::getFile(Twine(pathToFile)))
+{
+	initStructures();
+}
+
+/**
+ * Constructor
+ * @param inputStream Representation of input file
+ * @param loadFlags Load flags
+ */
+CoffFormat::CoffFormat(std::istream &inputStream, LoadFlags loadFlags) :
+		FileFormat(inputStream, loadFlags),
+		fileBuffer(MemoryBuffer::getMemBuffer(
+				StringRef(
+						reinterpret_cast<const char*>(bytes.data()),
+						bytes.size()),
+				"",
+				false))
+{
+	initStructures();
+}
+
+/**
+ * Constructor
+ * @param data Input data.
+ * @param size Input data size.
+ * @param loadFlags Load flags
+ */
+CoffFormat::CoffFormat(const std::uint8_t *data, std::size_t size, LoadFlags loadFlags) :
+		FileFormat(data, size, loadFlags),
+		fileBuffer(MemoryBuffer::getMemBuffer(StringRef(
+				reinterpret_cast<const char*>(data),
+				size)))
 {
 	initStructures();
 }
@@ -297,6 +332,7 @@ void CoffFormat::loadSections()
 		{
 			section->load(this);
 		}
+		section->computeEntropy();
 	}
 }
 
@@ -374,6 +410,12 @@ void CoffFormat::loadRelocations()
 	{
 		const auto *ffSec = getSection(secIndex);
 		const auto *coffSec = file->getCOFFSection(sec);
+
+		if (coffSec->PointerToRelocations >= getFileLength())
+		{
+			continue;
+		}
+
 		for(const auto &reloc : file->getRelocations(coffSec))
 		{
 			Relocation rel;
@@ -465,30 +507,14 @@ bool CoffFormat::getRelocationMask(unsigned relType, std::vector<std::uint8_t> &
 
 retdec::utils::Endianness CoffFormat::getEndianness() const
 {
-	switch(file->getMachine())
+	const llvm::object::coff_bigobj_file_header* bigHeader = nullptr;
+	if (!file->getCOFFBigObjHeader(bigHeader) && bigHeader)
 	{
-		case PELIB_IMAGE_FILE_MACHINE_I386:
-		case PELIB_IMAGE_FILE_MACHINE_I486:
-		case PELIB_IMAGE_FILE_MACHINE_PENTIUM:
-		case PELIB_IMAGE_FILE_MACHINE_AMD64:
-		case PELIB_IMAGE_FILE_MACHINE_R3000_LITTLE:
-		case PELIB_IMAGE_FILE_MACHINE_R4000:
-		case PELIB_IMAGE_FILE_MACHINE_R10000:
-		case PELIB_IMAGE_FILE_MACHINE_WCEMIPSV2:
-		case PELIB_IMAGE_FILE_MACHINE_MIPS16:
-		case PELIB_IMAGE_FILE_MACHINE_MIPSFPU:
-		case PELIB_IMAGE_FILE_MACHINE_MIPSFPU16:
-		case PELIB_IMAGE_FILE_MACHINE_ARM:
-		case PELIB_IMAGE_FILE_MACHINE_THUMB:
-		case PELIB_IMAGE_FILE_MACHINE_ARMNT:
-		case PELIB_IMAGE_FILE_MACHINE_ARM64:
-		case PELIB_IMAGE_FILE_MACHINE_POWERPC:
-		case PELIB_IMAGE_FILE_MACHINE_POWERPCFP:
-			return Endianness::LITTLE;
-		case PELIB_IMAGE_FILE_MACHINE_R3000_BIG:
-			return Endianness::BIG;
-		default:
-			return Endianness::UNKNOWN;
+		return Endianness::BIG;
+	}
+	else
+	{
+		return Endianness::LITTLE;
 	}
 }
 
@@ -583,34 +609,34 @@ bool CoffFormat::isExecutable() const
 	return !isDll() && !isObjectFile();
 }
 
-bool CoffFormat::getMachineCode(unsigned long long &result) const
+bool CoffFormat::getMachineCode(std::uint64_t &result) const
 {
 	result = file->getMachine();
 	return true;
 }
 
-bool CoffFormat::getAbiVersion(unsigned long long &result) const
+bool CoffFormat::getAbiVersion(std::uint64_t &result) const
 {
 	// not in COFF files
 	static_cast<void>(result);
 	return false;
 }
 
-bool CoffFormat::getImageBaseAddress(unsigned long long &imageBase) const
+bool CoffFormat::getImageBaseAddress(std::uint64_t &imageBase) const
 {
 	// not in COFF files
 	static_cast<void>(imageBase);
 	return false;
 }
 
-bool CoffFormat::getEpAddress(unsigned long long &result) const
+bool CoffFormat::getEpAddress(std::uint64_t &result) const
 {
 	// not in COFF files
 	static_cast<void>(result);
 	return false;
 }
 
-bool CoffFormat::getEpOffset(unsigned long long &epOffset) const
+bool CoffFormat::getEpOffset(std::uint64_t &epOffset) const
 {
 	// not in COFF files
 	static_cast<void>(epOffset);

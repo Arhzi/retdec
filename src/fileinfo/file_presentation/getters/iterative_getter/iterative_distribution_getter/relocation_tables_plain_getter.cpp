@@ -12,6 +12,7 @@
 using namespace retdec::utils;
 using namespace retdec::fileformat;
 
+namespace retdec {
 namespace fileinfo {
 
 namespace
@@ -43,14 +44,6 @@ RelocationTablesPlainGetter::RelocationTablesPlainGetter(FileInformation &fileIn
 	commonHeaderElements.insert(commonHeaderElements.begin(), std::begin(relHeaderArray), std::end(relHeaderArray));
 	commonHeaderDesc.insert(commonHeaderDesc.begin(), std::begin(relHeaderDesc), std::end(relHeaderDesc));
 	loadRecords();
-}
-
-/**
- * Destructor
- */
-RelocationTablesPlainGetter::~RelocationTablesPlainGetter()
-{
-
 }
 
 std::size_t RelocationTablesPlainGetter::getBasicInfo(std::size_t structIndex, std::vector<std::string> &desc, std::vector<std::string> &info) const
@@ -87,7 +80,7 @@ bool RelocationTablesPlainGetter::loadRecord(std::size_t structIndex, std::size_
 	}
 
 	record.clear();
-	record.push_back(numToStr(recIndex));
+	record.push_back(std::to_string(recIndex));
 	record.push_back(fileinfo.getRelocationTypeStr(structIndex, recIndex));
 	record.push_back(fileinfo.getRelocationOffsetStr(structIndex, recIndex, hexWithPrefix));
 	record.push_back(replaceNonprintableChars(fileinfo.getRelocationSymbolName(structIndex, recIndex)));
@@ -112,3 +105,4 @@ bool RelocationTablesPlainGetter::getFlagDescriptors(std::size_t structIndex, st
 }
 
 } // namespace fileinfo
+} // namespace retdec

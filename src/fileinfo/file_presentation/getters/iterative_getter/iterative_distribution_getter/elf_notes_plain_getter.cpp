@@ -6,10 +6,12 @@
 
 #include "fileinfo/file_presentation/getters/iterative_getter/iterative_distribution_getter/elf_notes_plain_getter.h"
 #include "retdec/utils/conversion.h"
+#include "retdec/utils/string.h"
 
 using namespace retdec::utils;
 using namespace retdec::fileformat;
 
+namespace retdec {
 namespace fileinfo {
 
 namespace
@@ -61,13 +63,6 @@ ElfNotesPlainGetter::ElfNotesPlainGetter(
 	loadRecords();
 }
 
-/**
- * Destructor
- */
-ElfNotesPlainGetter::~ElfNotesPlainGetter()
-{
-}
-
 std::size_t ElfNotesPlainGetter::getBasicInfo(
 		std::size_t structIndex,
 		std::vector<std::string> &desc,
@@ -95,9 +90,9 @@ std::size_t ElfNotesPlainGetter::getBasicInfo(
 	desc.push_back("File offset    : ");
 	desc.push_back("Size in file   : ");
 	desc.push_back("Number of notes: ");
-	info.push_back(toHex(notes.getSecSegOffset(), true));
-	info.push_back(numToStr(notes.getSecSegLength()));
-	info.push_back(numToStr(notes.getNotes().size()));
+	info.push_back(intToHexString(notes.getSecSegOffset(), true));
+	info.push_back(std::to_string(notes.getSecSegLength()));
+	info.push_back(std::to_string(notes.getNotes().size()));
 
 	return info.size();
 }
@@ -117,11 +112,11 @@ bool ElfNotesPlainGetter::loadRecord(
 	const auto& note = notes.getNotes()[recIndex];
 
 	record.clear();
-	record.push_back(numToStr(recIndex));
+	record.push_back(std::to_string(recIndex));
 	record.push_back(replaceNonprintableChars(note.owner));
-	record.push_back(toHex(note.type, true, 8));
-	record.push_back(toHex(note.dataOffset, true, 8));
-	record.push_back(numToStr(note.dataLength));
+	record.push_back(intToHexString(note.type, true, 8));
+	record.push_back(intToHexString(note.dataOffset, true, 8));
+	record.push_back(std::to_string(note.dataLength));
 	record.push_back(replaceNonprintableChars(note.description));
 
 	return true;
@@ -143,3 +138,4 @@ bool ElfNotesPlainGetter::getFlagDescriptors(
 }
 
 } // namespace fileinfo
+} // namespace retdec

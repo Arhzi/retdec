@@ -4,12 +4,14 @@
 * @copyright (c) 2017 Avast Software, licensed under the MIT license
 */
 
+#include <cstddef>
+
 #include "retdec/utils/memory.h"
 #include "retdec/utils/os.h"
 
 #ifdef OS_WINDOWS
 	#include <windows.h>
-#elif defined(OS_MACOS)
+#elif defined(OS_MACOS) || defined(OS_BSD)
 	#include <sys/types.h>
 	#include <sys/sysctl.h>
 #else
@@ -25,14 +27,14 @@ namespace utils {
 
 namespace {
 
-#ifdef OS_POSIX
+#if defined(OS_POSIX) && !defined(OS_MACOS)
 
 /**
 * @brief Implementation of @c limitSystemMemory() on POSIX-compliant systems.
 */
 bool limitSystemMemoryOnPOSIX(std::size_t limit) {
 	struct rlimit rl = {
-		.rlim_cur = limit,        // Soft limit.
+		.rlim_cur = static_cast<rlim_t>(limit),        // Soft limit.
 		.rlim_max = RLIM_INFINITY // Hard limit (ceiling for rlim_cur).
 	};
 	auto rc = setrlimit(RLIMIT_AS, &rl);
@@ -104,7 +106,7 @@ bool limitSystemMemoryOnWindows(std::size_t limit) {
 std::size_t getTotalSystemMemoryOnMacOS() {
 	int what[] = { CTL_HW, HW_MEMSIZE };
 	std::size_t value = 0;
-	size_t length = sizeof(value);
+	std::size_t length = sizeof(value);
 	auto rc = sysctl(what, 2, &value, &length, nullptr, 0);
 	return rc != -1 ? value : 0;
 }
@@ -113,9 +115,45 @@ std::size_t getTotalSystemMemoryOnMacOS() {
 * @brief Implementation of @c limitSystemMemory() on MacOS.
 */
 bool limitSystemMemoryOnMacOS(std::size_t limit) {
-	// Warning: We have found that limitSystemMemoryOnPOSIX() does not actually
-	// do anything on macOS. We need to find another way. See
-	// https://github.com/avast-tl/retdec/issues/379
+	// Warning: We can't limit memory on macOS. Before macOS 12,
+	// limitSystemMemoryOnPOSIX() does not actually do anything on macOS (it
+	// just succeeds). Since macOS 12, it returns an error and RetDec cannot
+	// start. For more details, see
+	// - https://github.com/avast/retdec/issues/379
+	// - https://github.com/avast/retdec/issues/1045
+	//
+	// To be honest, Apple can control memmory limit via a so-called ledger()
+	// system call which is private. An old version which was opened to
+	// OpenSource (from 10.9-10.10?) used setrlimit() but at some point
+	// setrlimit() was broken and not ledger(). Probably in macOS 12
+	// setrlimit() was completely broken.
+	//
+	// Since we do not have any other way of limiting the memory on macOS, just
+	// return true.
+	return true;
+}
+
+#elif defined(OS_BSD)
+
+/**
+* @brief Implementation of @c getTotalSystemMemory() on *BSD.
+*
+* AKA FreeBSD, DragonFly, NetBSD, OpenBSD, TrueOS, PCBSD
+*/
+std::size_t getTotalSystemMemoryOnBSD() {
+	int what[] = { CTL_HW, HW_PHYSMEM };
+	std::size_t value = 0;
+	std::size_t length = sizeof(value);
+	auto rc = sysctl(what, 2, &value, &length, nullptr, 0);
+	return rc != -1 ? value : 0;
+}
+
+/**
+* @brief Implementation of @c limitSystemMemory() on *BSD.
+*
+* AKA FreeBSD, DragonFly, NetBSD, OpenBSD, TrueOS, PCBSD
+*/
+bool limitSystemMemoryOnBSD(std::size_t limit) {
 	return limitSystemMemoryOnPOSIX(limit);
 }
 
@@ -125,9 +163,9 @@ bool limitSystemMemoryOnMacOS(std::size_t limit) {
 * @brief Implementation of @c getTotalSystemMemory() on Linux.
 */
 std::size_t getTotalSystemMemoryOnLinux() {
-    struct sysinfo system_info;
-    auto rc = sysinfo(&system_info);
-    return rc == 0 ? system_info.totalram : 0;
+	struct sysinfo system_info;
+	auto rc = sysinfo(&system_info);
+	return rc == 0 ? system_info.totalram : 0;
 }
 
 /**
@@ -151,6 +189,8 @@ std::size_t getTotalSystemMemory() {
 	return getTotalSystemMemoryOnWindows();
 #elif defined(OS_MACOS)
 	return getTotalSystemMemoryOnMacOS();
+#elif defined(OS_BSD)
+	return getTotalSystemMemoryOnBSD();
 #else
 	return getTotalSystemMemoryOnLinux();
 #endif
@@ -175,6 +215,8 @@ bool limitSystemMemory(std::size_t limit) {
 	return limitSystemMemoryOnWindows(limit);
 #elif defined(OS_MACOS)
 	return limitSystemMemoryOnMacOS(limit);
+#elif defined(OS_BSD)
+	return limitSystemMemoryOnBSD(limit);
 #else
 	return limitSystemMemoryOnLinux(limit);
 #endif

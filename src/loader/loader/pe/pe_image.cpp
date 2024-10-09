@@ -23,10 +23,6 @@ PeImage::PeImage(const std::shared_ptr<retdec::fileformat::FileFormat>& fileForm
 {
 }
 
-PeImage::~PeImage()
-{
-}
-
 /**
  * Virtual method overridden from retdec::loader::Image, which is used in image factory.
  * Loads the image using @c fileformat.
@@ -38,7 +34,7 @@ bool PeImage::load()
 	const retdec::fileformat::PeFormat* peFormat = static_cast<const retdec::fileformat::PeFormat*>(getFileFormat());
 
 	// Load image base address from fileformat and store it into loader image
-	unsigned long long imageBase;
+	std::uint64_t imageBase;
 	peFormat->getImageBaseAddress(imageBase);
 	setBaseAddress(imageBase);
 
@@ -113,10 +109,15 @@ Segment* PeImage::addSingleSegment(std::uint64_t address, std::vector<std::uint8
 
 bool PeImage::canAddSegment(std::uint64_t address, std::uint64_t memSize) const
 {
-	retdec::utils::Range<std::uint64_t> newSegRange(address, memSize ? address + memSize : address + 1);
+	std::uint64_t end =  memSize ? address + memSize : address + 1;
+	// check for potential overflow - wrap around, memsize should be at most 32bit, so this could suffice
+	if (end < address)
+		end = std::numeric_limits<std::uint64_t>::max();
+
+	retdec::common::Range<std::uint64_t> newSegRange(address, end);
 	for (const auto& seg : getSegments())
 	{
-		auto overlapResult = OverlapResolver::resolve(retdec::utils::Range<std::uint64_t>(seg->getAddress(), seg->getEndAddress()), newSegRange);
+		auto overlapResult = OverlapResolver::resolve(retdec::common::Range<std::uint64_t>(seg->getAddress(), seg->getEndAddress()), newSegRange);
 		if (overlapResult.getOverlap() != Overlap::None)
 			return false;
 	}
@@ -129,7 +130,7 @@ void PeImage::loadNonDecodableAddressRanges()
 	auto ranges = getFileFormat()->getNonDecodableAddressRanges();
 	for (const auto& range : ranges)
 	{
-		Range<uint64_t> rebasedRange(
+		common::Range<uint64_t> rebasedRange(
 				getBaseAddress() + range.getStart(),
 				getBaseAddress() + range.getEnd());
 

@@ -4,7 +4,6 @@
 * @copyright (c) 2017 Avast Software, licensed under the MIT license
 */
 
-#include <iostream>
 #include <functional>
 
 #include <llvm/IR/InstIterator.h>
@@ -12,7 +11,6 @@
 #include <llvm/IR/Instructions.h>
 
 #include "retdec/utils/string.h"
-#include "retdec/bin2llvmir/analyses/reaching_definitions.h"
 #include "retdec/bin2llvmir/optimizations/idioms_libgcc/idioms_libgcc.h"
 #include "retdec/bin2llvmir/utils/llvm.h"
 #include "retdec/bin2llvmir/utils/debug.h"
@@ -45,9 +43,7 @@ class IdiomsLibgccImpl
 		llvm::GlobalVariable* res1Double = nullptr;
 
 	public:
-		bool testArchAndInitialize(config::Architecture& arch, Abi* abi);
-
-		void localize(llvm::Value* v);
+		bool testArchAndInitialize(common::Architecture& arch, Abi* abi);
 
 		void log(
 				llvm::Instruction* orig,
@@ -208,10 +204,10 @@ class IdiomsLibgccImpl
  *         to do for the current architecture.
  */
 bool IdiomsLibgccImpl::testArchAndInitialize(
-		config::Architecture& arch,
+		common::Architecture& arch,
 		Abi* abi)
 {
-	if (arch.isArmOrThumb())
+	if (arch.isArm32OrThumb())
 	{
 		op0Single = abi->getRegister(ARM_REG_R0);
 		op0Double = abi->getRegister(ARM_REG_R0); // + r1
@@ -244,25 +240,6 @@ bool IdiomsLibgccImpl::testArchAndInitialize(
 		return false;
 	}
 	return true;
-}
-
-void IdiomsLibgccImpl::localize(llvm::Value* v)
-{
-	Instruction* i = dyn_cast<Instruction>(llvm_utils::skipCasts(v));
-	if (i == nullptr)
-	{
-		return;
-	}
-
-	auto defs = ReachingDefinitionsAnalysis::defsFromUse_onDemand(i);
-	if (defs.size() != 1)
-	{
-		return;
-	}
-	auto* def = dyn_cast<StoreInst>(*defs.begin());
-
-	auto uses = ReachingDefinitionsAnalysis::usesFromDef_onDemand(def);
-	IrModifier::localize(def, uses);
 }
 
 void IdiomsLibgccImpl::log(
@@ -661,9 +638,6 @@ void IdiomsLibgccImpl::addf(llvm::CallInst* inst)
 
 	log(inst, {l0, l1, r0, s0});
 	replaceResultUses(inst, r0);
-
-	localize(l0);
-	localize(l1);
 }
 
 /**
@@ -682,9 +656,6 @@ void IdiomsLibgccImpl::divf(llvm::CallInst* inst)
 
 	log(inst, {l0, l1, r0, s0});
 	replaceResultUses(inst, r0);
-
-	localize(l0);
-	localize(l1);
 }
 
 /**
@@ -703,9 +674,6 @@ void IdiomsLibgccImpl::mulf(llvm::CallInst* inst)
 
 	log(inst, {l0, l1, r0, s0});
 	replaceResultUses(inst, r0);
-
-	localize(l0);
-	localize(l1);
 }
 
 /**
@@ -724,9 +692,6 @@ void IdiomsLibgccImpl::subf(llvm::CallInst* inst)
 
 	log(inst, {l0, l1, r0, s0});
 	replaceResultUses(inst, r0);
-
-	localize(l0);
-	localize(l1);
 }
 
 /**
@@ -745,9 +710,6 @@ void IdiomsLibgccImpl::subrf(llvm::CallInst* inst)
 
 	log(inst, {l0, l1, r0, s0});
 	replaceResultUses(inst, r0);
-
-	localize(l0);
-	localize(l1);
 }
 
 /**
@@ -1251,7 +1213,7 @@ void IdiomsLibgccImpl::rcmpge(llvm::CallInst* inst)
 char IdiomsLibgcc::ID = 0;
 
 static RegisterPass<IdiomsLibgcc> X(
-		"idioms-libgcc",
+		"retdec-idioms-libgcc",
 		"Libgcc idioms optimization",
 		false, // Only looks at CFG
 		false // Analysis Pass

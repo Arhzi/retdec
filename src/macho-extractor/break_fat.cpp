@@ -4,16 +4,15 @@
  * @copyright (c) 2017 Avast Software, licensed under the MIT license
  */
 
-#include <iostream>
 #include <fstream>
 
-#include <llvm/Support/MachO.h>
 #include <llvm/Support/Path.h>
 #include <rapidjson/document.h>
 #include <rapidjson/prettywriter.h>
 
 #include "retdec/macho-extractor/break_fat.h"
 #include "retdec/utils/conversion.h"
+#include "retdec/utils/io/log.h"
 #include "retdec/utils/string.h"
 
 using namespace llvm;
@@ -22,6 +21,7 @@ using namespace llvm::object;
 using namespace llvm::sys;
 using namespace rapidjson;
 using namespace retdec::utils;
+using namespace retdec::utils::io;
 
 namespace {
 
@@ -74,7 +74,7 @@ std::string cpuTypeToString(
 std::string getArchName(
 		MachOUniversalBinary::object_iterator &it)
 {
-	std::string result = it->getArchTypeName();
+	std::string result = it->getArchFlagName();
 	if(result.empty())
 	{
 		result = cpuTypeToString(it->getCPUType());
@@ -119,13 +119,6 @@ BreakMachOUniversal::BreakMachOUniversal(
 	{
 		valid = false;
 	}
-}
-
-/**
- * BreakMachOUniversal destructor
- */
-BreakMachOUniversal::~BreakMachOUniversal()
-{
 }
 
 /**
@@ -345,7 +338,7 @@ bool BreakMachOUniversal::listArchitectures(
 	// Write warning when --object option is used on non-archive target.
 	if(!isStatic && withObjects)
 	{
-		std::cerr << "Warning: input file is not an archive! (--objects)\n";
+		Log::error() << Log::Warning << "input file is not an archive! (--objects)\n";
 	}
 
 	return output.good();

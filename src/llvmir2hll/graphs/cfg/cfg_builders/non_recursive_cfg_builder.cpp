@@ -28,11 +28,10 @@
 #include "retdec/llvmir2hll/support/debug.h"
 #include "retdec/llvmir2hll/support/expression_negater.h"
 #include "retdec/llvmir2hll/utils/ir.h"
-#include "retdec/llvm-support/diagnostics.h"
 #include "retdec/utils/container.h"
+#include "retdec/utils/io/log.h"
 
-using namespace retdec::llvm_support;
-
+using namespace retdec::utils::io;
 using retdec::utils::clear;
 
 namespace retdec {
@@ -147,11 +146,6 @@ NonRecursiveCFGBuilder::NonRecursiveCFGBuilder():
 	CFGBuilder(), stopIterNextStmts(false) {}
 
 /**
-* @brief Destructs the builder.
-*/
-NonRecursiveCFGBuilder::~NonRecursiveCFGBuilder() {}
-
-/**
 * @brief Creates and returns a new NonRecursiveCFGBuilder.
 */
 ShPtr<NonRecursiveCFGBuilder> NonRecursiveCFGBuilder::create() {
@@ -181,7 +175,8 @@ void NonRecursiveCFGBuilder::createEntryNode() {
 	// way.
 	// For each parameter...
 	for (const auto &param : func->getParams()) {
-		ShPtr<Statement> varDefStmt(VarDefStmt::create(param));
+		ShPtr<Statement> varDefStmt(
+			VarDefStmt::create(param, nullptr, nullptr, func->getStartAddress()));
 		cfg->stmtNodeMapping[varDefStmt] = cfg->entryNode;
 		cfg->entryNode->stmts.push_back(varDefStmt);
 	}
@@ -396,8 +391,8 @@ void NonRecursiveCFGBuilder::addEdgeFromVector(const EdgeToAdd &edge) {
 
 		// TODO This is the same problem as in the TODO below.
 		if (i == emptyStmtToNodeMap.end()) {
-			printWarningMessage("[NonRecursiveCFGBuilder] there is no node for"
-				" an edge to `", edge.succStmt, "` -> skipping this edge");
+			Log::error() << Log::Warning << "[NonRecursiveCFGBuilder] there is no node for"
+				" an edge to `" << edge.succStmt << "` -> skipping this edge" << std::endl;
 			return;
 		}
 
@@ -435,8 +430,8 @@ void NonRecursiveCFGBuilder::addEdgeFromVector(const EdgeToAdd &edge) {
 		//  - binaries-suite/arm-elf/O2/gnuarm-elf-gcc-O2--gzip
 		//
 		if (!targetNode) {
-			printWarningMessage("[NonRecursiveCFGBuilder] there is no node for"
-				" an edge to `", edge.succStmt, "` -> skipping this edge");
+			Log::error() << Log::Warning << "[NonRecursiveCFGBuilder] there is no node for"
+				" an edge to `" << edge.succStmt << "` -> skipping this edge" << std::endl;
 			return;
 		}
 

@@ -25,9 +25,12 @@ class ExportTable
 		std::string expHashCrc32;                   ///< exphash CRC32
 		std::string expHashMd5;                     ///< exphash MD5
 		std::string expHashSha256;                  ///< exphash SHA256
+		std::string dllName;
 	public:
-		ExportTable();
-		~ExportTable();
+		/// @name Setters
+		/// @{
+		void setDllName(const std::string& dllName);
+		/// @}
 
 		/// @name Getters
 		/// @{
@@ -35,6 +38,7 @@ class ExportTable
 		const std::string& getExphashCrc32() const;
 		const std::string& getExphashMd5() const;
 		const std::string& getExphashSha256() const;
+		const std::string& getDllName() const;
 		const Export* getExport(std::size_t exportIndex) const;
 		const Export* getExport(const std::string &name) const;
 		const Export* getExportOnAddress(unsigned long long address) const;

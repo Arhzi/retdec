@@ -98,7 +98,7 @@ struct PrintCapstoneModeToString_Mips
 // If some test case is not meant for all modes, use some of the ONLY_MODE_*,
 // SKIP_MODE_* macros.
 //
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
 		InstantiateMipsWithAllModes,
 		Capstone2LlvmIrTranslatorMipsTests,
 // TODO: Try to add CS_MODE_MIPS3 and CS_MODE_MIPS32R6. But Keystone is failing
@@ -123,6 +123,25 @@ TEST_P(Capstone2LlvmIrTranslatorMipsTests, MIPS_INS_ADDIU_3_op)
 	});
 
 	emulate("addiu $1, $2, 0x1000");
+
+	EXPECT_JUST_REGISTERS_LOADED({MIPS_REG_2});
+	EXPECT_JUST_REGISTERS_STORED({
+		{MIPS_REG_1, 0x6678},
+	});
+	EXPECT_NO_MEMORY_LOADED_STORED();
+	EXPECT_NO_VALUE_CALLED();
+}
+
+TEST_P(Capstone2LlvmIrTranslatorMipsTests, MIPS_INS_ADDIU_3_op_bin)
+{
+	ONLY_MODE_32;
+
+	setRegisters({
+		{MIPS_REG_1, 0x1234},
+		{MIPS_REG_2, 0x5678},
+	});
+
+	emulate_bin("00 10 41 24");
 
 	EXPECT_JUST_REGISTERS_LOADED({MIPS_REG_2});
 	EXPECT_JUST_REGISTERS_STORED({
@@ -538,6 +557,29 @@ TEST_P(Capstone2LlvmIrTranslatorMipsTests, MIPS_INS_NOR_3_op)
 	EXPECT_JUST_REGISTERS_LOADED({MIPS_REG_1, MIPS_REG_2});
 	EXPECT_JUST_REGISTERS_STORED({
 		{MIPS_REG_1, 0x000ff000},
+	});
+	EXPECT_NO_MEMORY_LOADED_STORED();
+	EXPECT_NO_VALUE_CALLED();
+}
+
+//
+// MIPS_INS_NOT
+//
+
+TEST_P(Capstone2LlvmIrTranslatorMipsTests, MIPS_INS_NOT)
+{
+	SKIP_MODE_64;
+
+	setRegisters({
+		{MIPS_REG_1, 0x12345678},
+		{MIPS_REG_2, 0xff00ff00},
+	});
+
+	emulate("not $1, $2");
+
+	EXPECT_JUST_REGISTERS_LOADED({MIPS_REG_2});
+	EXPECT_JUST_REGISTERS_STORED({
+		{MIPS_REG_1, 0x00ff00ff},
 	});
 	EXPECT_NO_MEMORY_LOADED_STORED();
 	EXPECT_NO_VALUE_CALLED();
@@ -1510,6 +1552,21 @@ TEST_P(Capstone2LlvmIrTranslatorMipsTests, MIPS_INS_CLZ_ones)
 
 //
 // MIPS_INS_SEH
+// TODO: Keystone -- instruction requires a CPU feature not currently enabled.
+//
+
+//
+// MIPS_INS_SNE, MIPS_INS_SNEI
+// TODO: Keystone -- instruction requires a CPU feature not currently enabled.
+//
+
+//
+// MIPS_INS_SNE, MIPS_INS_SNEI
+// TODO: Keystone -- instruction requires a CPU feature not currently enabled.
+//
+
+//
+// MIPS_INS_SEQ, MIPS_INS_SEQI
 // TODO: Keystone -- instruction requires a CPU feature not currently enabled.
 //
 
@@ -4342,8 +4399,48 @@ TEST_P(Capstone2LlvmIrTranslatorMipsTests, MIPS_INS_ABS_d_64)
 }
 
 //
+// MIPS_INS_NEGU
+//
+
+TEST_P(Capstone2LlvmIrTranslatorMipsTests, MIPS_INS_NEGU)
+{
+	SKIP_MODE_64;
+
+	setRegisters({
+		{MIPS_REG_1, 0x00ffffff},
+	});
+
+	emulate("negu $1, $1");
+
+	EXPECT_JUST_REGISTERS_LOADED({MIPS_REG_1});
+	EXPECT_JUST_REGISTERS_STORED({
+		{MIPS_REG_1, 0xff000001},
+	});
+	EXPECT_NO_MEMORY_LOADED_STORED();
+	EXPECT_NO_VALUE_CALLED();
+}
+
+//
 // MIPS_INS_NEG
 //
+
+TEST_P(Capstone2LlvmIrTranslatorMipsTests, MIPS_INS_NEG_int)
+{
+	SKIP_MODE_64;
+
+	setRegisters({
+		{MIPS_REG_1, 0x00ffffff},
+	});
+
+	emulate("neg $1, $1");
+
+	EXPECT_JUST_REGISTERS_LOADED({MIPS_REG_1});
+	EXPECT_JUST_REGISTERS_STORED({
+		{MIPS_REG_1, 0xff000001},
+	});
+	EXPECT_NO_MEMORY_LOADED_STORED();
+	EXPECT_NO_VALUE_CALLED();
+}
 
 TEST_P(Capstone2LlvmIrTranslatorMipsTests, MIPS_INS_NEG_s_32)
 {
@@ -6011,22 +6108,24 @@ TEST_P(Capstone2LlvmIrTranslatorMipsTests, MIPS_INS_C_ule_d_32)
 }
 
 //
-// MIPS_INS_NEGU
+//==============================================================================
+// Issue unit tests.
+//==============================================================================
 //
 
-TEST_P(Capstone2LlvmIrTranslatorMipsTests, MIPS_INS_NEGU)
+TEST_P(Capstone2LlvmIrTranslatorMipsTests, issue_633)
 {
-	SKIP_MODE_64;
+	ONLY_MODE_32;
 
 	setRegisters({
-		{MIPS_REG_1, 0x00ffffff},
+		{MIPS_REG_W31, 3.14_f64},
 	});
 
-	emulate("negu $1, $1");
+	emulate_bin("c0 ff b7 79"); // ori.b $w31, $w31, 0xb7
 
-	EXPECT_JUST_REGISTERS_LOADED({MIPS_REG_1});
+	EXPECT_JUST_REGISTERS_LOADED({MIPS_REG_W31});
 	EXPECT_JUST_REGISTERS_STORED({
-		{MIPS_REG_1, 0xff000001},
+		{MIPS_REG_W31, ANY},
 	});
 	EXPECT_NO_MEMORY_LOADED_STORED();
 	EXPECT_NO_VALUE_CALLED();

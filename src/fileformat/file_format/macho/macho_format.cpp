@@ -66,17 +66,46 @@ std::string getVersionFromDWord(const std::uint32_t version)
  * @param pathToFile Path to input file
  * @param loadFlags Load flags
  */
-MachOFormat::MachOFormat(std::string pathToFile, LoadFlags loadFlags) : FileFormat(pathToFile, loadFlags),
-	fileBuffer(MemoryBuffer::getFile(Twine(filePath))), file(nullptr), fatFile(nullptr)
+MachOFormat::MachOFormat(std::string pathToFile, LoadFlags loadFlags) :
+		FileFormat(pathToFile, loadFlags),
+		fileBuffer(MemoryBuffer::getFile(Twine(filePath))),
+		file(nullptr),
+		fatFile(nullptr)
 {
 	initStructures();
 }
 
 /**
- * Destructor
+ * Constructor
+ * @param inputStream Representation of input file
+ * @param loadFlags Load flags
  */
-MachOFormat::~MachOFormat()
+MachOFormat::MachOFormat(std::istream &inputStream, LoadFlags loadFlags) :
+		FileFormat(inputStream, loadFlags),
+		fileBuffer(MemoryBuffer::getMemBuffer(StringRef(
+				reinterpret_cast<const char*>(bytes.data()),
+				bytes.size()))),
+		file(nullptr),
+		fatFile(nullptr)
 {
+	initStructures();
+}
+
+/**
+ * Constructor
+ * @param data Input data.
+ * @param size Input data size.
+ * @param loadFlags Load flags
+ */
+MachOFormat::MachOFormat(const std::uint8_t *data, std::size_t size, LoadFlags loadFlags) :
+		FileFormat(data, size, loadFlags),
+		fileBuffer(MemoryBuffer::getMemBuffer(StringRef(
+				reinterpret_cast<const char*>(data),
+				size))),
+		file(nullptr),
+		fatFile(nullptr)
+{
+	initStructures();
 }
 
 /**
@@ -474,15 +503,27 @@ void MachOFormat::loadSectionRelocations(std::size_t offset, std::size_t count)
 {
 	if (count)
 	{
+		auto *buffPtr = getBufferStart() + offset;
+		auto *buffEnd = getBufferEnd();
+		if (buffPtr >= buffEnd)
+		{
+			return;
+		}
+
 		auto *tabPtr = new RelocationTable;
 		tabPtr->setLinkToSymbolTable(0);
 		// Load relocations
-		auto *buffPtr = getBufferStart() + offset;
 		for (std::size_t i = 0; i < count; ++i)
 		{
 			// Load relocation info struct as 2 times 4 bytes and swap endianness if necessary
 			std::int32_t rInfo[2];
-			memcpy(rInfo, buffPtr + i * 8, 8);
+			auto *src = buffPtr + i * 8;
+			std::size_t sz = 8;
+			if (src + sz >= buffEnd)
+			{
+				break;
+			}
+			memcpy(rInfo, src, sz);
 			if(isLittle != sys::IsLittleEndianHost)
 			{
 				sys::swapByteOrder(rInfo[0]);
@@ -527,6 +568,7 @@ template<typename T> void MachOFormat::loadSection(const T &section)
 	{
 		secPtr->load(this);
 	}
+	secPtr->computeEntropy();
 	sections.push_back(secPtr);
 	loadSectionRelocations(section.reloff, section.nreloc);
 	++sectionCounter;
@@ -672,6 +714,10 @@ void MachOFormat::oldEntryPointCommand(const llvm::object::MachOObjectFile::Load
 void MachOFormat::loadDylibCommand(const llvm::object::MachOObjectFile::LoadCommandInfo &commandInfo)
 {
 	auto command = file->getDylibIDLoadCommand(commandInfo);
+	if (command.dylib.name >= command.cmdsize)
+	{
+		return;
+	}
 	std::string name = commandInfo.Ptr + command.dylib.name;
 	// Try to get short name
 	StringRef sufix;
@@ -914,14 +960,15 @@ void MachOFormat::dyldInfoCommand(const llvm::object::MachOObjectFile::LoadComma
 		}
 		Export exportSym;
 
-		for(auto &exportRef : file->exports())
+		Error err = Error::success();
+		for(auto &exportRef : file->exports(err))
 		{
 			exportSym.setAddress(offsetToAddress(exportRef.address()));
 			exportSym.invalidateOrdinalNumber();
 			std::string name = exportRef.name().str();
 			if(name.empty())
 			{
-				exportSym.setName("exported_function_" + numToStr(exportRef.address(), std::hex));
+				exportSym.setName("exported_function_" + intToHexString(exportRef.address()));
 			}
 			else
 			{
@@ -929,6 +976,11 @@ void MachOFormat::dyldInfoCommand(const llvm::object::MachOObjectFile::LoadComma
 			}
 
 			exportTable->addExport(exportSym);
+		}
+		if (err)
+		{
+			// ignore errors
+			consumeError(std::move(err));
 		}
 	}
 
@@ -940,7 +992,8 @@ void MachOFormat::dyldInfoCommand(const llvm::object::MachOObjectFile::LoadComma
 
 	if(startPtr + command.bind_off + command.bind_size <= endPtr)
 	{
-		for(const auto &importRef : file->bindTable())
+		Error err = Error::success();
+		for(const auto &importRef : file->bindTable(err))
 		{
 			auto importSym = getImportFromBindEntry(importRef);
 			if(!importSym)
@@ -949,12 +1002,18 @@ void MachOFormat::dyldInfoCommand(const llvm::object::MachOObjectFile::LoadComma
 			}
 
 			importTable->addImport(std::move(importSym));
+		}
+		if (err)
+		{
+			// ignore errors
+			consumeError(std::move(err));
 		}
 	}
 
 	if(startPtr + command.lazy_bind_off + command.lazy_bind_size <= endPtr)
 	{
-		for(const auto &importRef : file->lazyBindTable())
+		Error err = Error::success();
+		for(const auto &importRef : file->lazyBindTable(err))
 		{
 			auto importSym = getImportFromBindEntry(importRef);
 			if(!importSym)
@@ -964,11 +1023,17 @@ void MachOFormat::dyldInfoCommand(const llvm::object::MachOObjectFile::LoadComma
 
 			importTable->addImport(std::move(importSym));
 		}
+		if (err)
+		{
+			// ignore errors
+			consumeError(std::move(err));
+		}
 	}
 
 	if(startPtr + command.weak_bind_off + command.weak_bind_size <= endPtr)
 	{
-		for(const auto &importRef : file->weakBindTable())
+		Error err = Error::success();
+		for(const auto &importRef : file->weakBindTable(err))
 		{
 			auto importSym = getImportFromBindEntry(importRef);
 			if(!importSym)
@@ -977,6 +1042,11 @@ void MachOFormat::dyldInfoCommand(const llvm::object::MachOObjectFile::LoadComma
 			}
 
 			importTable->addImport(std::move(importSym));
+		}
+		if (err)
+		{
+			// ignore errors
+			consumeError(std::move(err));
 		}
 	}
 }
@@ -990,7 +1060,8 @@ void MachOFormat::dyldInfoCommand(const llvm::object::MachOObjectFile::LoadComma
  */
 std::unique_ptr<Import> MachOFormat::getImportFromBindEntry(const llvm::object::MachOBindEntry &input)
 {
-	if(input.malformed() || input.segmentIndex() >= getDeclaredNumberOfSegments())
+	if(input.segmentIndex() < 0
+			|| static_cast<std::size_t>(input.segmentIndex()) >= getDeclaredNumberOfSegments())
 	{
 		return nullptr;
 	}
@@ -1188,7 +1259,7 @@ std::vector<std::string> MachOFormat::getMachOUniversalArchitectures() const
 
 	for(auto i = fatFile->begin_objects(), e = fatFile->end_objects(); i != e; ++i)
 	{
-		std::string archName = i->getArchTypeName();
+		std::string archName = i->getArchFlagName();
 		if(archName.empty())
 		{
 			archName = "unknown subtype ";
@@ -1236,6 +1307,15 @@ std::vector<std::string> MachOFormat::getMachOUniversalArchitectures() const
 const char *MachOFormat::getBufferStart() const
 {
 	return fileBuffer.get()->getBufferStart();
+}
+
+/**
+ * Get pointer to the end of LLVM buffer with file content.
+ * @return Pointer to buffer
+ */
+const char *MachOFormat::getBufferEnd() const
+{
+	return fileBuffer.get()->getBufferEnd();
 }
 
 /**
@@ -1304,23 +1384,23 @@ bool MachOFormat::isExecutable() const
 	return filetype == MachO::MH_EXECUTE || filetype == MachO::MH_PRELOAD;
 }
 
-bool MachOFormat::getMachineCode(unsigned long long &result) const
+bool MachOFormat::getMachineCode(std::uint64_t &result) const
 {
 	is32 ? result = static_cast<unsigned long long>(header32.cputype) : result = static_cast<unsigned long long>(header64.cputype);
 	return true;
 }
 
-bool MachOFormat::getAbiVersion(unsigned long long &result) const
+bool MachOFormat::getAbiVersion(std::uint64_t &result) const
 {
 	return false;
 }
 
-bool MachOFormat::getImageBaseAddress(unsigned long long &imageBase) const
+bool MachOFormat::getImageBaseAddress(std::uint64_t &imageBase) const
 {
 	return false;
 }
 
-bool MachOFormat::getEpAddress(unsigned long long &result) const
+bool MachOFormat::getEpAddress(std::uint64_t &result) const
 {
 	if(hasEntryPoint)
 	{
@@ -1331,7 +1411,7 @@ bool MachOFormat::getEpAddress(unsigned long long &result) const
 	return false;
 }
 
-bool MachOFormat::getEpOffset(unsigned long long &epOffset) const
+bool MachOFormat::getEpOffset(std::uint64_t &epOffset) const
 {
 	if(hasEntryPoint)
 	{

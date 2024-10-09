@@ -6,10 +6,12 @@
 
 #include "fileinfo/file_presentation/getters/iterative_getter/iterative_distribution_getter/elf_core_map_plain_getter.h"
 #include "retdec/utils/conversion.h"
+#include "retdec/utils/string.h"
 
 using namespace retdec::utils;
 using namespace retdec::fileformat;
 
+namespace retdec {
 namespace fileinfo {
 
 namespace
@@ -57,13 +59,6 @@ ElfCoreMapPlainGetter::ElfCoreMapPlainGetter(
 	loadRecords();
 }
 
-/**
- * Destructor
- */
-ElfCoreMapPlainGetter::~ElfCoreMapPlainGetter()
-{
-}
-
 std::size_t ElfCoreMapPlainGetter::getBasicInfo(
 		std::size_t structIndex,
 		std::vector<std::string> &desc,
@@ -79,7 +74,7 @@ std::size_t ElfCoreMapPlainGetter::getBasicInfo(
 
 	const auto& fMap = fileinfo.getElfCoreInfo().getFileMap();
 	desc.push_back("Number of entries: ");
-	info.push_back(numToStr(fMap.size()));
+	info.push_back(std::to_string(fMap.size()));
 
 	return info.size();
 }
@@ -98,8 +93,8 @@ bool ElfCoreMapPlainGetter::loadRecord(
 	auto& entry = fileinfo.getElfCoreInfo().getFileMap()[recIndex];
 
 	record.clear();
-	record.push_back(numToStr(recIndex));
-	record.push_back(toHex(entry.address, true));
+	record.push_back(std::to_string(recIndex));
+	record.push_back(intToHexString(entry.address, true));
 	record.push_back(std::to_string(entry.size));
 	record.push_back(std::to_string(entry.page));
 	record.push_back(replaceNonprintableChars(entry.path));
@@ -124,3 +119,4 @@ bool ElfCoreMapPlainGetter::getFlagDescriptors(
 }
 
 } // namespace fileinfo
+} // namespace retdec

@@ -4,13 +4,17 @@
  * @copyright (c) 2017 Avast Software, licensed under the MIT license
  */
 
+#include <elfio/elf_types.hpp>
+#include <functional>
 #include <map>
+#include <regex>
 
 #include "retdec/utils/conversion.h"
 #include "retdec/utils/string.h"
 #include "retdec/fileformat/file_format/elf/elf_format.h"
 #include "retdec/fileformat/types/symbol_table/elf_symbol.h"
 #include "retdec/fileformat/utils/conversions.h"
+#include <tlsh/tlsh.h>
 
 using namespace retdec::utils;
 using namespace ELFIO;
@@ -863,6 +867,21 @@ Symbol::UsageType getSymbolUsageType(unsigned char type)
 	}
 }
 
+Import::UsageType symbolToImportUsage(Symbol::UsageType symbolUsage)
+{
+	switch(symbolUsage)
+	{
+		case Symbol::UsageType::FUNCTION:
+			return Import::UsageType::FUNCTION;
+		case Symbol::UsageType::OBJECT:
+			return Import::UsageType::OBJECT;
+		case Symbol::UsageType::FILE:
+			return Import::UsageType::FILE;
+		default:
+			return Import::UsageType::UNKNOWN;
+	}
+}
+
 /**
  * Get type of section
  * @param sec ELF section
@@ -960,24 +979,38 @@ std::size_t getAreaSize(std::size_t address, const Segment &seg, const DynamicTa
 		{
 			switch(item.getType())
 			{
-				case DT_NULL:
-				case DT_NEEDED:
-				case DT_PLTRELSZ:
-				case DT_RELASZ:
-				case DT_RELAENT:
-				case DT_STRSZ:
-				case DT_SYMENT:
-				case DT_SONAME:
-				case DT_RPATH:
-				case DT_RELSZ:
-				case DT_RELENT:
-				case DT_INIT_ARRAYSZ:
-				case DT_FINI_ARRAYSZ:
-				case DT_RUNPATH:
-				case DT_PREINIT_ARRAYSZ:
+				// Whitelist types that we use -> there can be weird entries
+				// that would screw up the size.
+				// All symbols with d_ptr semantics (= virtual address)
+				// https://dmz-portal.mips.com/wiki/MIPS_Dynamic
+				case DT_PLTGOT:
+				case DT_HASH:
+				case DT_STRTAB:
+				case DT_SYMTAB:
+				case DT_RELA:
+				case DT_INIT:
+				case DT_FINI:
+				case DT_REL:
+				case DT_DEBUG:
+				case DT_JMPREL:
+				case DT_INIT_ARRAY:
+				case DT_FINI_ARRAY:
+				case DT_PREINIT_ARRAY:
+				// MIPS specific.
+				//case DT_MIPS_BASE_ADDRESS: // We probably do not want to use this.
+				case DT_MIPS_CONFLICT:
+				case DT_MIPS_LIBLIST:
+				{
+					auto tmp = !size ? item.getValue() : std::min(size, static_cast<std::size_t>(item.getValue()));
+					if (tmp > address)
+					{
+						size = tmp;
+					}
 					break;
+				}
 				default:
-					size = !size ? item.getValue() : std::min(size, static_cast<std::size_t>(item.getValue()));
+					break;
+
 			}
 		}
 	}
@@ -1024,19 +1057,6 @@ void getRelatedRelocationTables(const ELFIO::elfio *file, const ELFIO::section *
 }
 
 /**
- * Fix symbol name
- * @param symbolName Name of symbol
- */
-void fixSymbolName(std::string &symbolName)
-{
-	const auto pos = symbolName.find("@@GLIBC_");
-	if(pos && pos != std::string::npos)
-	{
-		symbolName.erase(pos);
-	}
-}
-
-/**
  * Create new relocation with given parameters
  * @param name Name of symbol being relocated
  * @param offset Offset of symbol being relocated
@@ -1068,7 +1088,8 @@ Relocation createRelocation(const std::string &name, std::uint64_t offset, std::
  * @param pathToFile Path to input file
  * @param loadFlags Load flags
  */
-ElfFormat::ElfFormat(std::string pathToFile, LoadFlags loadFlags) : FileFormat(pathToFile, loadFlags)
+ElfFormat::ElfFormat(std::string pathToFile, LoadFlags loadFlags) :
+		FileFormat(pathToFile, loadFlags)
 {
 	initStructures();
 }
@@ -1078,33 +1099,22 @@ ElfFormat::ElfFormat(std::string pathToFile, LoadFlags loadFlags) : FileFormat(p
  * @param inputStream Representation of input file
  * @param loadFlags Load flags
  */
-ElfFormat::ElfFormat(std::istream &inputStream, LoadFlags loadFlags) : FileFormat(inputStream, loadFlags)
+ElfFormat::ElfFormat(std::istream &inputStream, LoadFlags loadFlags) :
+		FileFormat(inputStream, loadFlags)
 {
 	initStructures();
 }
 
 /**
- * Destructor
+ * Constructor
+ * @param data Input data.
+ * @param size Input data size.
+ * @param loadFlags Load flags
  */
-ElfFormat::~ElfFormat()
+ElfFormat::ElfFormat(const std::uint8_t *data, std::size_t size, LoadFlags loadFlags) :
+		FileFormat(data, size, loadFlags)
 {
-
-}
-
-/**
- * Constructor of RelocationTableInfo
- */
-ElfFormat::RelocationTableInfo::RelocationTableInfo() : address(0), size(0), entrySize(0), type(SHT_NULL)
-{
-
-}
-
-/**
- * Destructor of RelocationTableInfo
- */
-ElfFormat::RelocationTableInfo::~RelocationTableInfo()
-{
-
+	initStructures();
 }
 
 /**
@@ -1121,15 +1131,8 @@ void ElfFormat::initStructures()
 	elfClass = reader.get_class();
 	loadSections();
 	loadSegments();
-	if(!getNumberOfSymbolTables() && reader.segments.size() && !isUnknownEndian() &&
-		(elfClass == ELFCLASS32 || elfClass == ELFCLASS64))
-	{
-		writer.create(elfClass, reader.get_encoding());
-		writer.set_os_abi(static_cast<unsigned char>(getOsOrAbi()));
-		writer.set_type(reader.get_type());
-		writer.set_machine(reader.get_machine());
-		loadInfoFromDynamicSegment();
-	}
+	loadDynamicSegmentSection();
+
 	computeSectionTableHashes();
 	loadStrings();
 	loadNotes(); // must be done after sections and segments
@@ -1304,7 +1307,13 @@ ELFIO::section* ElfFormat::addRelocationTable(ELFIO::section *dynamicSection, co
 		return nullptr;
 	}
 
-	auto *relocationTable = writer.sections.add((info.type == SHT_REL ? "rel_" : "rela_") + dynamicSection->get_name());
+	std::string name = info.type == SHT_REL ? "rel_" : "rela_";
+	if (info.plt)
+	{
+		name = "plt_" + name;
+	}
+
+	auto *relocationTable = writer.sections.add(name + dynamicSection->get_name());
 	relocationTable->set_type(info.type);
 	relocationTable->set_offset(relSeg->getOffset() + (info.address - relSeg->getAddress()));
 	relocationTable->set_address(info.address);
@@ -1394,6 +1403,64 @@ ELFIO::section* ElfFormat::addRelaRelocationTable(ELFIO::section *dynamicSection
 	info.size = sizeRecord->getValue();
 	info.entrySize = entrySizeRecord->getValue();
 	info.type = SHT_RELA;
+	return addRelocationTable(dynamicSection, info, symbolTable);
+}
+
+/**
+ * LOAD relocations associated with the Procedure Linkage Table (PLT).
+ * @param dynamicSection Section from @a writer which represents ELF dynamic segment
+ * @param table Loaded dynamic records from @a dynamicSection
+ * @param symbolTable Symbol table associated with relocation table
+ * @return Pointer to added relocation table or @c nullptr if relocation table
+ *    was not successfully added to @a writer
+ */
+ELFIO::section* ElfFormat::addPltRelocationTable(ELFIO::section *dynamicSection, const DynamicTable &table, ELFIO::section *symbolTable)
+{
+	if(!dynamicSection || dynamicSection->get_type() != SHT_DYNAMIC)
+	{
+		return nullptr;
+	}
+
+	const auto *pltgotRecord = table.getRecordOfType(DT_PLTGOT);
+	const auto *addrRecord = table.getRecordOfType(DT_JMPREL);
+	const auto *sizeRecord = table.getRecordOfType(DT_PLTRELSZ);
+	const auto *entryTypeRecord = table.getRecordOfType(DT_PLTREL);
+	const auto *relEntrySizeRecord = table.getRecordOfType(DT_RELENT);
+	const auto *relaEntrySizeRecord = table.getRecordOfType(DT_RELAENT);
+
+	if(!pltgotRecord || !addrRecord || !sizeRecord || !entryTypeRecord)
+	{
+		return nullptr;
+	}
+	if (entryTypeRecord->getValue() != DT_REL
+			&& entryTypeRecord->getValue() != DT_RELA)
+	{
+		return nullptr;
+	}
+	if ((entryTypeRecord->getValue() == DT_REL && !relEntrySizeRecord)
+			|| (entryTypeRecord->getValue() == DT_RELA && !relaEntrySizeRecord))
+	{
+		return nullptr;
+	}
+
+	RelocationTableInfo info;
+	info.plt = true;
+	info.address = addrRecord->getValue();
+	info.size = sizeRecord->getValue();
+	if (entryTypeRecord->getValue() == DT_REL)
+	{
+		info.entrySize = relEntrySizeRecord->getValue();
+		info.type = SHT_REL;
+	}
+	else if (entryTypeRecord->getValue() == DT_RELA)
+	{
+		info.entrySize = relaEntrySizeRecord->getValue();
+		info.type = SHT_RELA;
+	}
+	else
+	{
+		return nullptr;
+	}
 	return addRelocationTable(dynamicSection, info, symbolTable);
 }
 
@@ -1670,21 +1737,57 @@ void ElfFormat::loadSymbols(const ELFIO::elfio *file, const ELFIO::symbol_sectio
 	std::unordered_multimap<std::string, unsigned long long> importNameAddressMap;
 	loadRelocations(file, section, importNameAddressMap);
 
+	/* check to ignore symbols from segments for telfhash this is pretty
+	   ugly and error prone, find a better way to know symbol source */
+	bool isSegmentSymbols = section->get_name().find("dynamic_") != std::string::npos;
+
+	if (!telfhashDynsym && !isSegmentSymbols) {
+		telfhashSymbols = {};
+	}
+
+	// Cache keeping track of created imports (i.e. (name, address) pairs)
+	// to prevent repeated creation of the same imports.
+	// To save space, this uses string references and relies on imports not
+	// being moved -- they should not be, as ImportTable stores vector of unique
+	// pointers, but if that ever changes, this will end badly.
+    auto createdImportsComparator = [](
+        const std::pair<const std::string*, unsigned long long>& lhs,
+        const std::pair<const std::string*, unsigned long long>& rhs
+    ) {
+        if (*(lhs.first) != *(rhs.first)) {
+            return *(lhs.first) < *(rhs.first);
+        }
+        return lhs.second < rhs.second;
+    };
+    std::set<
+        std::pair<const std::string*, unsigned long long>,
+        decltype(createdImportsComparator)
+    > createdImports(createdImportsComparator);
+
 	for(std::size_t i = 0, e = elfSymbolTable->get_loaded_symbols_num(); i < e; ++i)
 	{
 		auto symbol = std::make_shared<ElfSymbol>();
 		elfSymbolTable->get_symbol(i, name, value, size, bind, type, link, other);
+
 		size ? symbol->setSize(size) : symbol->invalidateSize();
 		symbol->setType(getSymbolType(bind, type, link));
 		symbol->setUsageType(getSymbolUsageType(type));
 		symbol->setOriginalName(name);
-		fixSymbolName(name);
 		symbol->setName(name);
 		symbol->setIndex(i);
 		symbol->setElfType(type);
 		symbol->setElfBind(bind);
 		symbol->setElfOther(other);
 		link = fixSymbolLink(link, value);
+		auto visibility = other & 0x3;
+		if (type == STT_FUNC && bind == STB_GLOBAL && visibility == STV_DEFAULT) {
+			/* check if we already have prefered dynsym symbols and ignore symbols from segments
+			   this is pretty ugly and error prone, find a better way to know symbol source */
+			if (!telfhashDynsym && !isSegmentSymbols) {
+				telfhashSymbols.push_back(name);
+			}
+		}
+
 		if(link >= file->sections.size() || !file->sections[link] || link == SHN_ABS ||
 			link == SHN_COMMON || link == SHN_UNDEF || link == SHN_XINDEX)
 		{
@@ -1696,24 +1799,42 @@ void ElfFormat::loadSymbols(const ELFIO::elfio *file, const ELFIO::symbol_sectio
 			{
 				if(!importTable)
 				{
-					importTable = new ImportTable();
+					importTable = new ElfImportTable();
 				}
 				auto keyIter = importNameAddressMap.equal_range(name);
+
 				// we create std::set from std::multimap values in order to ensure determinism
-				std::set<std::pair<std::string, unsigned long long>> addresses(keyIter.first, keyIter.second);
+				std::set<std::pair<std::string, unsigned long long>> addresses;
+				for (auto it = keyIter.first; it != keyIter.second; ++it)
+				{
+					if (!createdImports.count({&it->first, it->second})) {
+						addresses.insert(*it);
+					}
+				}
+
 				for(const auto &address : addresses)
 				{
 					auto import = std::make_unique<Import>();
 					import->setName(name);
 					import->setAddress(address.second);
-					importTable->addImport(std::move(import));
+					import->setUsageType(symbolToImportUsage(symbol->getUsageType()));
+					auto* inserted = importTable->addImport(std::move(import));
+
+					if (inserted) {
+						createdImports.emplace(&inserted->getName(), inserted->getAddress());
+					}
 				}
 				if(keyIter.first == keyIter.second && getSectionFromAddress(value))
 				{
 					auto import = std::make_unique<Import>();
 					import->setName(name);
 					import->setAddress(value);
-					importTable->addImport(std::move(import));
+					import->setUsageType(symbolToImportUsage(symbol->getUsageType()));
+					auto* inserted = importTable->addImport(std::move(import));
+
+					if (inserted) {
+						createdImports.emplace(&inserted->getName(), inserted->getAddress());
+					}
 				}
 			}
 		}
@@ -1734,6 +1855,7 @@ void ElfFormat::loadSymbols(const ELFIO::elfio *file, const ELFIO::symbol_sectio
 	}
 
 	symtab->setName(section->get_name());
+
 	if(symtab->hasSymbols())
 	{
 		symbolTables.push_back(symtab);
@@ -1742,9 +1864,83 @@ void ElfFormat::loadSymbols(const ELFIO::elfio *file, const ELFIO::symbol_sectio
 	{
 		delete symtab;
 	}
+	if (section->get_type() == SHT_DYNSYM) {
+		telfhashDynsym = true;
+	}
 
+	loadTelfhash();
 	loadImpHash();
 	loadExpHash();
+}
+
+/* exclusions are based on the original implementation
+   https://github.com/trendmicro/telfhash/blob/master/telfhash/telfhash.py */
+static const std::unordered_set<std::string> exclusion_set = {
+	"__libc_start_main", // main function
+	"main", // main function
+	"abort", // ARM default
+	"cachectl", // MIPS default
+	"cacheflush", // MIPS default
+	"puts", // Compiler optimization (function replacement)
+	"atol", // Compiler optimization (function replacement)
+	"malloc_trim" // GNU extensions
+};
+
+/*
+ignore
+	symbols starting with . or
+	x86-64 specific functions
+	string functions (str.* and mem.*), gcc changes them depending on architecture
+	symbols starting with . or _
+*/
+static std::regex exclusion_regex("(^[_\.].*$)|(^.*64$)|(^str.*$)|(^mem.*$)");
+
+static bool isSymbolExcluded(const std::string& symbol)
+{
+	return symbol.empty()
+	|| std::regex_match(symbol, exclusion_regex)
+	|| exclusion_set.count(symbol);
+}
+
+void ElfFormat::loadTelfhash()
+{
+	std::vector<std::string> imported_symbols;
+	imported_symbols.reserve(telfhashSymbols.size());
+
+	for (const auto& symbol : telfhashSymbols) {
+		/* It is important to first exclude, then lowercase
+		   as "Str_Aprintf" is valid, but would become
+		   filtered when lower case */
+		if (isSymbolExcluded(symbol)) {
+			continue;
+		}
+
+		auto name = toLower(symbol);
+
+		imported_symbols.emplace_back(name);
+	}
+
+	/* sort them lexicographically */
+	std::sort(imported_symbols.begin(), imported_symbols.end());
+
+	std::string impHashString;
+	for (const auto& symbol : imported_symbols) {
+		if (!impHashString.empty())
+			impHashString.append(1, ',');
+
+		impHashString.append(symbol);
+	}
+
+	if (impHashString.size()) {
+		auto data = reinterpret_cast<const uint8_t*>(impHashString.data());
+
+		Tlsh tlsh;
+		tlsh.update(data, impHashString.size());
+
+		tlsh.final();
+		const int show_version = 1; /* this prepends the hash with 'T' + number of the version */
+		telfhash = tlsh.getHash(show_version);
+	}
 }
 
 /**
@@ -1840,51 +2036,6 @@ void ElfFormat::loadSymbols(const SymbolTable &oldTab, const DynamicTable &dynTa
 }
 
 /**
- * Load dynamic table
- * @param table Parameter for store dynamic table
- * @param elfDynamicTable Pointer to dynamic section accessor
- *
- * @a Content of elfDynamicTable is stored into @a table. Previous content
- * of @a table is deleted.
- */
-void ElfFormat::loadDynamicTable(DynamicTable &table, const ELFIO::dynamic_section_accessor *elfDynamicTable)
-{
-	table.clear();
-	if(!elfDynamicTable)
-	{
-		return;
-	}
-
-	DynamicEntry entry;
-	std::string desc;
-	Elf_Xword type = 0, value = 0;
-
-	for(std::size_t i = 0, e = elfDynamicTable->get_loaded_entries_num(); i < e; ++i)
-	{
-		elfDynamicTable->get_entry(i, type, value, desc);
-		entry.setType(type);
-		entry.setValue(value);
-		entry.setDescription(desc);
-		table.addRecord(entry);
-		if(type == DT_NULL)
-		{
-			break;
-		}
-	}
-}
-
-/**
- * Load dynamic table
- * @param elfDynamicTable Pointer to dynamic section accessor
- */
-void ElfFormat::loadDynamicTable(const ELFIO::dynamic_section_accessor *elfDynamicTable)
-{
-	auto *table = new DynamicTable();
-	loadDynamicTable(*table, elfDynamicTable);
-	dynamicTables.push_back(table);
-}
-
-/**
  * Load information about sections
  */
 void ElfFormat::loadSections()
@@ -1919,6 +2070,7 @@ void ElfFormat::loadSections()
 		fSec->setElfLink(sec->get_link());
 		fSec->setNumberOfSections(noOfSections);
 		fSec->setArchByteSize(getBytesPerWord());
+		fSec->computeEntropy();
 		sections.push_back(fSec);
 	}
 
@@ -1936,16 +2088,33 @@ void ElfFormat::loadSections()
 			{
 				auto sym = symbol_section_accessor(reader, sec);
 				loadSymbols(&reader, &sym, sec);
-				break;
-			}
-			case SHT_DYNAMIC:
-			{
-				auto dyn = dynamic_section_accessor(reader, sec);
-				loadDynamicTable(&dyn);
+
+				symtabOffsets.insert(sec->get_offset());
+				symtabAddresses.insert(sec->get_address());
+
 				break;
 			}
 			default:;
 		}
+	}
+}
+
+void ElfFormat::checkSegmentLoadable(const segment* seg)
+{
+	if (!seg)
+		return;
+
+	auto filesize = seg->get_file_size();
+	auto fileoffset = seg->get_offset();
+	int segtype = seg->get_type();
+
+	// Check if LOAD segments are actually in the file
+	if (segtype == PT_LOAD && getFileLength() < fileoffset + filesize)
+	{
+		_ldrErrInfo.isLoadableAnyway = false;
+		_ldrErrInfo.loaderErrorCode = ElfLoaderError::LDR_ERROR_SEGMENT_OUT_OF_FILE;
+		_ldrErrInfo.loaderError = "LOAD Segment data is not within file bounds";
+		_ldrErrInfo.loaderErrorUserFriendly = "LOAD Segment data is not within file bounds";
 	}
 }
 
@@ -1975,58 +2144,46 @@ void ElfFormat::loadSegments()
 		fSeg->setElfAlign(seg->get_align());
 		fSeg->load(this);
 		segments.push_back(fSeg);
+
+		checkSegmentLoadable(seg);
 	}
 }
 
-/**
- * Load information from dynamic tables
- * @param noOfTables Number of dynamic tables which have been added to @a writer
- *    member of this class. It is supposed, that each of these tables have been
- *    added as the new section to the end of section list andas the new dynamic
- *    table to the end of dynamic table list.
- */
-void ElfFormat::loadInfoFromDynamicTables(std::size_t noOfTables)
+void ElfFormat::loadDynamicSegmentSection()
 {
-	const auto noOfWriterSections = writer.sections.size();
-	if(!noOfTables || noOfTables > noOfWriterSections || noOfTables > getNumberOfDynamicTables())
+	// Read from segments first.
+	//
+	if(reader.segments.size() && !isUnknownEndian() &&
+		(elfClass == ELFCLASS32 || elfClass == ELFCLASS64))
 	{
-		return;
+		writer.create(elfClass, reader.get_encoding());
+		writer.set_os_abi(static_cast<unsigned char>(getOsOrAbi()));
+		writer.set_type(reader.get_type());
+		writer.set_machine(reader.get_machine());
+		loadInfoFromDynamicSegment();
 	}
-
-	for(std::size_t i = 0; i < noOfTables; ++i)
+	// Try sections if no dynamic table read from segments.
+	//
+	if (dynamicTables.empty())
 	{
-		auto *sec = writer.sections[noOfWriterSections - noOfTables + i];
-		auto *dynTab = dynamicTables[getNumberOfDynamicTables() - noOfTables + i];
-		auto *strTab = addStringTable(sec, *dynTab);
-		if(!strTab)
+		const auto noOfSections = reader.sections.size();
+		for(auto i = 0; i < noOfSections; ++i)
 		{
-			continue;
-		}
-
-		auto *dynAccessor = new dynamic_section_accessor(writer, sec);
-		loadDynamicTable(*dynTab, dynAccessor);
-		delete dynAccessor;
-
-		auto *symTab = addSymbolTable(sec, *dynTab, strTab);
-		if(!symTab)
-		{
-			continue;
-		}
-
-		addRelRelocationTable(sec, *dynTab, symTab);
-		addRelaRelocationTable(sec, *dynTab, symTab);
-		auto *symAccessor = new symbol_section_accessor(writer, symTab);
-		loadSymbols(&writer, symAccessor, symTab);
-		delete symAccessor;
-
-		// MIPS specific analysis
-		if(isMips() && symbolTables.size())
-		{
-			auto *got = addGlobalOffsetTable(sec, *dynTab);
-			if(got)
+			auto *sec = reader.sections[i];
+			if (sec && sec->get_type() == SHT_DYNAMIC)
 			{
-				auto *symbols = symbolTables.back();
-				loadSymbols(*symbols, *dynTab, *got);
+				if (sec->get_entry_size() == 0)
+				{
+					auto esz = (reader.get_class() == ELFCLASS64) ? sizeof(Elf64_Dyn) : sizeof(Elf32_Dyn);
+					sec->set_entry_size(esz);
+				}
+				sec->load(*reader.get_istream(), sec->get_offset(), sec->get_size());
+
+				dynamic_section_accessor dyn(reader, sec);
+				if (auto* tbl = loadDynamicTable(&dyn, sec))
+				{
+					loadInfoFromDynamicTables(*tbl, sec);
+				}
 			}
 		}
 	}
@@ -2037,8 +2194,7 @@ void ElfFormat::loadInfoFromDynamicTables(std::size_t noOfTables)
  */
 void ElfFormat::loadInfoFromDynamicSegment()
 {
-	std::size_t noOfDynTables = 0;
-
+	std::size_t noOfDynTables = 1;
 	for(std::size_t i = 0, e = reader.segments.size(); i < e; ++i)
 	{
 		auto *seg = reader.segments[i];
@@ -2047,27 +2203,138 @@ void ElfFormat::loadInfoFromDynamicSegment()
 			continue;
 		}
 
-		if(seg->get_offset() + seg->get_file_size() > getFileLength())
+		if (seg->get_offset() >= getFileLength())
 		{
 			continue;
 		}
+		std::size_t segSz = getFileLength() - seg->get_offset();
 
-		seg->load(*reader.get_istream(), seg->get_offset(), seg->get_file_size());
-		auto *dynamic = writer.sections.add("dynamic_" + numToStr(++noOfDynTables));
+		seg->load(*reader.get_istream(), seg->get_offset(), segSz);
+		auto *dynamic = writer.sections.add("dynamic_" + std::to_string(noOfDynTables++));
 		dynamic->set_type(SHT_DYNAMIC);
 		dynamic->set_offset(seg->get_offset());
 		dynamic->set_address(seg->get_virtual_address());
 		dynamic->set_entry_size((reader.get_class() == ELFCLASS32) ? sizeof(Elf32_Dyn) : sizeof(Elf64_Dyn));
 		dynamic->set_addr_align(seg->get_align());
 		dynamic->set_link(0);
-		dynamic->set_size(seg->get_file_size());
-		dynamic->set_data(seg->get_data(), seg->get_file_size());
-		auto *accessor = new dynamic_section_accessor(writer, dynamic);
-		loadDynamicTable(accessor);
-		delete accessor;
+		dynamic->set_size(segSz);
+		dynamic->set_data(seg->get_data(), segSz);
+
+		dynamic_section_accessor accessor(writer, dynamic);
+		if (auto* tbl = loadDynamicTable(&accessor, dynamic))
+		{
+			loadInfoFromDynamicTables(*tbl, dynamic);
+		}
+	}
+}
+
+/**
+ * Load dynamic table
+ * @param elfDynamicTable Pointer to dynamic section accessor
+ * @param sec Pointer to dynamic table section
+ * @return Successfully loaded table, @c nullptr otherwise.
+ */
+DynamicTable* ElfFormat::loadDynamicTable(
+		const ELFIO::dynamic_section_accessor *elfDynamicTable,
+		const ELFIO::section *sec)
+{
+	auto *table = new DynamicTable();
+	if (sec)
+	{
+		table->setSectionName(sec->get_name());
+	}
+	loadDynamicTable(*table, elfDynamicTable);
+	if (table->getNumberOfRecords() > 0)
+	{
+		return dynamicTables.emplace_back(table);
+	}
+	else
+	{
+		delete table;
+		return nullptr;
+	}
+}
+
+/**
+ * Load dynamic table
+ * @param table Parameter for store dynamic table
+ * @param elfDynamicTable Pointer to dynamic section accessor
+ *
+ * @a Content of elfDynamicTable is stored into @a table. Previous content
+ * of @a table is deleted.
+ */
+void ElfFormat::loadDynamicTable(DynamicTable &table, const ELFIO::dynamic_section_accessor *elfDynamicTable)
+{
+	table.clear();
+	if(!elfDynamicTable)
+	{
+		return;
 	}
 
-	loadInfoFromDynamicTables(noOfDynTables);
+	DynamicEntry entry;
+	std::string desc;
+	Elf_Xword type = 0, value = 0;
+
+	for(std::size_t i = 0, e = elfDynamicTable->get_loaded_entries_num(); i < e; ++i)
+	{
+		elfDynamicTable->get_entry(i, type, value, desc);
+		entry.setType(type);
+		entry.setValue(value);
+		entry.setDescription(desc);
+		table.addRecord(entry);
+		if(type == DT_NULL)
+		{
+			break;
+		}
+	}
+}
+
+/**
+ * Load information from dynamic tables
+ */
+void ElfFormat::loadInfoFromDynamicTables(DynamicTable &dynTab, ELFIO::section *sec)
+{
+	auto *strTab = addStringTable(sec, dynTab);
+	if(!strTab)
+	{
+		return;
+	}
+
+	dynamic_section_accessor dynAccessor(writer, sec);
+	loadDynamicTable(dynTab, &dynAccessor);
+
+	auto *symTab = addSymbolTable(sec, dynTab, strTab);
+	if(!symTab)
+	{
+		return;
+	}
+
+	addRelRelocationTable(sec, dynTab, symTab);
+	addRelaRelocationTable(sec, dynTab, symTab);
+	addPltRelocationTable(sec, dynTab, symTab);
+	// Load symtab from DYNAMIC section only if it is different from all
+	// already loaded symtabs.
+	if (symtabOffsets.count(symTab->get_offset()) == 0
+			&& symtabAddresses.count(symTab->get_address()) == 0)
+	{
+		auto *symAccessor = new symbol_section_accessor(writer, symTab);
+		loadSymbols(&writer, symAccessor, symTab);
+		delete symAccessor;
+
+		symtabOffsets.insert(symTab->get_offset());
+		symtabAddresses.insert(symTab->get_address());
+	}
+
+	// MIPS specific analysis
+	if(isMips() && symbolTables.size())
+	{
+		auto *got = addGlobalOffsetTable(sec, dynTab);
+		if(got)
+		{
+			auto *symbols = symbolTables.back();
+			loadSymbols(*symbols, dynTab, *got);
+		}
+	}
 }
 
 /**
@@ -2490,7 +2757,7 @@ std::size_t ElfFormat::getBytesPerWord() const
 
 bool ElfFormat::hasMixedEndianForDouble() const
 {
-	unsigned long long abiVersion = 0;
+	std::uint64_t abiVersion = 0;
 	bool hasAbi = getAbiVersion(abiVersion);
 	return isArm() && (!hasAbi || abiVersion < 5);
 }
@@ -2525,13 +2792,13 @@ bool ElfFormat::isExecutable() const
 	return reader.get_type() == ET_EXEC;
 }
 
-bool ElfFormat::getMachineCode(unsigned long long &result) const
+bool ElfFormat::getMachineCode(std::uint64_t &result) const
 {
 	result = reader.get_machine();
 	return true;
 }
 
-bool ElfFormat::getAbiVersion(unsigned long long &result) const
+bool ElfFormat::getAbiVersion(std::uint64_t &result) const
 {
 	// this works only for 32-bit ARM
 	if(!isArm() || getWordLength() != 32)
@@ -2548,14 +2815,14 @@ bool ElfFormat::getAbiVersion(unsigned long long &result) const
 	return abi;
 }
 
-bool ElfFormat::getImageBaseAddress(unsigned long long &imageBase) const
+bool ElfFormat::getImageBaseAddress(std::uint64_t &imageBase) const
 {
 	// not in ELF files
 	static_cast<void>(imageBase);
 	return false;
 }
 
-bool ElfFormat::getEpAddress(unsigned long long &result) const
+bool ElfFormat::getEpAddress(std::uint64_t &result) const
 {
 	const unsigned long long epAddress = reader.get_entry();
 	if(epAddress)
@@ -2586,9 +2853,9 @@ bool ElfFormat::getEpAddress(unsigned long long &result) const
 	return false;
 }
 
-bool ElfFormat::getEpOffset(unsigned long long &epOffset) const
+bool ElfFormat::getEpOffset(std::uint64_t &epOffset) const
 {
-	unsigned long long epRva;
+	std::uint64_t epRva;
 	if(!getEpAddress(epRva))
 	{
 		return false;
@@ -2841,6 +3108,11 @@ unsigned long long ElfFormat::getBaseOffset() const
 	}
 
 	return minOffset == std::numeric_limits<unsigned long long>::max() ? 0 : minOffset;
+}
+
+
+const std::string& ElfFormat::getTelfhash() const {
+	return telfhash;
 }
 
 } // namespace fileformat

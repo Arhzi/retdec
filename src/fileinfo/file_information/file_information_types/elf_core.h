@@ -7,9 +7,11 @@
 #ifndef FILEINFO_FILE_INFORMATION_FILE_INFORMATION_TYPES_ELF_CORE_H
 #define FILEINFO_FILE_INFORMATION_FILE_INFORMATION_TYPES_ELF_CORE_H
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
+namespace retdec {
 namespace fileinfo {
 
 using AuxVectorEntry = std::pair<std::string, std::uint64_t>;
@@ -36,9 +38,6 @@ class ElfCore
 		std::vector<FileMapEntry> fileMap;
 
 	public:
-		ElfCore();
-		~ElfCore() = default;
-
 		/// @name Queries
 		/// @{
 		bool hasAuxVector() const;
@@ -61,5 +60,6 @@ class ElfCore
 };
 
 } // namespace fileinfo
+} // namespace retdec
 
 #endif

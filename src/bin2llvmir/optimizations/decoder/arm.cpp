@@ -8,7 +8,7 @@
 #include "retdec/bin2llvmir/utils/capstone.h"
 #include "retdec/utils/string.h"
 
-using namespace retdec::utils;
+using namespace retdec::common;
 using namespace retdec::capstone2llvmir;
 using namespace llvm;
 
@@ -109,7 +109,7 @@ std::size_t Decoder::decodeJumpTargetDryRun_arm(
 	auto basicMode = _c2l->getBasicMode();
 	if (mode != basicMode) _c2l->modifyBasicMode(mode);
 
-	static csh ce = _c2l->getCapstoneEngine();
+	csh ce = _c2l->getCapstoneEngine();
 
 	decodedSz = 0;
 	uint64_t addr = jt.getAddress();
@@ -213,7 +213,7 @@ void Decoder::patternsPseudoCall_arm(llvm::CallInst*& call, AsmInstruction& ai)
 	}
 }
 
-cs_mode Decoder::determineMode_arm(cs_insn* insn, utils::Address& target)
+cs_mode Decoder::determineMode_arm(cs_insn* insn, common::Address& target)
 {
 	if (insn->id != ARM_INS_BX && insn->id != ARM_INS_BLX)
 	{

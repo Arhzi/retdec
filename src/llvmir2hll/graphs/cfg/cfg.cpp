@@ -16,7 +16,6 @@
 
 using retdec::utils::hasItem;
 using retdec::utils::removeItem;
-using retdec::utils::toString;
 
 namespace retdec {
 namespace llvmir2hll {
@@ -37,11 +36,6 @@ CFG::Node::Node() {}
 * @brief Constructs a new node with the selected @a label.
 */
 CFG::Node::Node(const std::string &label): label(label) {}
-
-/**
-* @brief Destructs the node.
-*/
-CFG::Node::~Node() {}
 
 /**
 * @brief Returns the node's label.
@@ -315,11 +309,6 @@ CFG::Edge::Edge(ShPtr<Node> src, ShPtr<Node> dst, ShPtr<Expression> label):
 	src(src), label(label), dst(dst) {}
 
 /**
-* @brief Destructs the edge.
-*/
-CFG::Edge::~Edge() {}
-
-/**
 * @brief Returns the source node of the edge.
 */
 ShPtr<CFG::Node> CFG::Edge::getSrc() const {
@@ -348,11 +337,6 @@ ShPtr<CFG::Node> CFG::Edge::getDst() const {
 * @param[in] func The CFG will correspond to this function.
 */
 CFG::CFG(ShPtr<Function> func): correspondingFunction(func) {}
-
-/**
-* @brief Destructs the CFG.
-*/
-CFG::~CFG() {}
 
 /**
 * @brief Returns the function which corresponds to the CFG.

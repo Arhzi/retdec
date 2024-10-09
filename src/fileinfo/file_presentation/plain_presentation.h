@@ -9,6 +9,7 @@
 
 #include "fileinfo/file_presentation/file_presentation.h"
 
+namespace retdec {
 namespace fileinfo {
 
 /**
@@ -17,8 +18,9 @@ namespace fileinfo {
 class PlainPresentation : public FilePresentation
 {
 	private:
-		bool verbose;     ///< @c true - print all information about file
-		bool explanatory; ///< @c true - print explanatory notes
+		bool verbose;      ///< @c true - print all information about file
+		bool explanatory;  ///< @c true - print explanatory notes
+		bool analysisTime; ///< @c true - print when the analysis was done
 
 		/// @name Auxiliary presentation methods
 		/// @{
@@ -30,16 +32,18 @@ class PlainPresentation : public FilePresentation
 		void presentSimpleFlags(const std::string &title, const std::string &flags, const std::vector<std::string> &desc, const std::vector<std::string> &abbv) const;
 		void presentPatterns(const std::string &title, const std::vector<Pattern> &patterns);
 		void presentDotnetClasses() const;
+		void presentVisualBasicObjects() const;
 		void presentNotes() const;
 		void presentCore() const;
+		void presentSignatures() const;
 		/// @}
 	public:
-		PlainPresentation(FileInformation &fileinfo_, bool verbose_, bool explanatory_);
-		virtual ~PlainPresentation() override;
+		PlainPresentation(FileInformation &fileinfo_, bool verbose_, bool explanatory_, bool analysisTime_);
 
 		virtual bool present() override;
 };
 
 } // namespace fileinfo
+} // namespace retdec
 
 #endif

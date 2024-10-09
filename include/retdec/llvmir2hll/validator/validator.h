@@ -11,7 +11,9 @@
 
 #include "retdec/llvmir2hll/support/smart_ptr.h"
 #include "retdec/llvmir2hll/support/visitors/ordered_all_visitor.h"
-#include "retdec/llvm-support/diagnostics.h"
+#include "retdec/utils/io/log.h"
+
+using namespace retdec::utils::io;
 
 namespace retdec {
 namespace llvmir2hll {
@@ -32,8 +34,6 @@ namespace llvmir2hll {
 */
 class Validator: protected OrderedAllVisitor {
 public:
-	virtual ~Validator() override;
-
 	virtual std::string getId() const = 0;
 
 	bool validate(ShPtr<Module> module, bool printMessageOnError = false);
@@ -47,12 +47,10 @@ protected:
 	/**
 	* @brief Function to be called when there is a validation error.
 	*/
-	template<typename... Args>
-	void validationError(const std::string &warningMessage, Args &&... args) {
+	void validationError(const std::string &warningMessage) {
 		moduleIsCorrect = false;
 		if (printMessageOnError) {
-			retdec::llvm_support::printWarningMessage(warningMessage,
-				std::forward<Args>(args)...);
+			Log::error() << Log::Warning << warningMessage << std::endl;
 		}
 	}
 

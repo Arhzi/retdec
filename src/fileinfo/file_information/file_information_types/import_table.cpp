@@ -7,23 +7,8 @@
 #include "fileinfo/file_information/file_information_types/import_table.h"
 #include "fileinfo/file_information/file_information_types/type_conversions.h"
 
+namespace retdec {
 namespace fileinfo {
-
-/**
- * Constructor
- */
-ImportTable::ImportTable() : table(nullptr)
-{
-
-}
-
-/**
- * Destructor
- */
-ImportTable::~ImportTable()
-{
-
-}
 
 /**
  * Get number of libraries in table
@@ -70,6 +55,11 @@ std::string ImportTable::getImphashSha256() const
 	return table ? table->getImphashSha256() : "";
 }
 
+std::string ImportTable::getImphashTlsh() const
+{
+	return table ? table->getImpHashTlsh() : "";
+}
+
 /**
  * Get import
  * @param position Index of selected import from table (indexed from 0)
@@ -89,6 +79,27 @@ std::string ImportTable::getImportName(std::size_t position) const
 {
 	const auto *record = table ? table->getImport(position) : nullptr;
 	return record ? record->getName() : "";
+}
+
+std::string ImportTable::getImportUsageType(std::size_t position) const
+{
+	const auto *record = table ? table->getImport(position) : nullptr;
+	if (record == nullptr)
+	{
+		return "";
+	}
+	switch (record->getUsageType())
+	{
+		case retdec::fileformat::Import::UsageType::FILE:
+			return "FILE";
+		case retdec::fileformat::Import::UsageType::FUNCTION:
+			return "FUNCTION";
+		case retdec::fileformat::Import::UsageType::OBJECT:
+			return "OBJECT";
+		case retdec::fileformat::Import::UsageType::UNKNOWN:
+		default:
+			return "UNKNOWN";
+	}
 }
 
 /**
@@ -122,9 +133,36 @@ std::string ImportTable::getImportAddressStr(std::size_t position, std::ios_base
  */
 std::string ImportTable::getImportOrdinalNumberStr(std::size_t position, std::ios_base &(* format)(std::ios_base &)) const
 {
-	unsigned long long ordinal;
+	std::uint64_t ordinal;
 	const auto *record = table ? table->getImport(position) : nullptr;
 	return record && record->getOrdinalNumber(ordinal) ? getNumberAsString(ordinal, format) : "";
+}
+
+/**
+ * Get n-th missing dependency
+ * @param position Index of selected import from table (indexed from 0)
+ * @return library name
+ */
+std::string ImportTable::getMissingDepName(std::size_t position) const
+{
+	std::string depName = "";
+
+	if(table != NULL)
+		depName = table->getMissingDependencies().at(position);
+	return depName;
+}
+
+/**
+ * Get the number of missing dependencies
+ * @return number of missing dependencies
+ */
+std::size_t ImportTable::getNumberOfMissingDeps() const
+{
+	size_t depsCount = 0;
+
+	if (table != NULL)
+		depsCount = table->getMissingDependencies().size();
+	return depsCount;
 }
 
 /**
@@ -146,3 +184,4 @@ bool ImportTable::hasRecords() const
 }
 
 } // namespace fileinfo
+} // namespace retdec

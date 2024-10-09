@@ -13,22 +13,24 @@
 using namespace retdec::utils;
 using namespace retdec::fileformat;
 
+namespace retdec {
 namespace fileinfo {
 
 namespace
 {
 
-const std::size_t sectionDistributionArray[] = {5, 17, 14, 8, 11, 7, 11, 12, 11, 11, 11, 11, 11, 11, 11, 12, 11, 9, 8};
+const std::size_t sectionDistributionArray[] = {5, 17, 14, 8, 11, 7, 11, 12, 11, 11, 11, 11, 11, 11, 11, 12, 11, 9, 8, 8};
 const std::string sectionHeaderArray[] = {"i", "name", "type", "flags", "offset", "line", "fsize", "address",
 										"memsize", "align", "esize", "relocOff", "relocLine", "relocNum",
-										"linesOff", "linesNum", "link", "other", "crc32"};
+										"linesOff", "linesNum", "link", "other", "entropy", "crc32"};
 const std::string sectionHeaderDesc[] = {"index", "name of section", "type of section", "section flags", "offset in file",
 										"start line of section", "size in file", "start address in memory", "size in memory",
 										"alignment in memory", "size in bytes of each entry in section",
 										"offset of relocation entries for section", "start line of relocation entries for section",
 										"number of relocation entries for section", "offset of line-number entries for section",
 										"number of line-number entries for section", "link to another section",
-										"extra information about section (read file format manual)", "CRC32 of section content"};
+										"extra information about section (read file format manual)", "section entropy",
+										"CRC32 of section content"};
 
 } // anonymous namespace
 
@@ -48,14 +50,6 @@ SectionPlainGetter::SectionPlainGetter(FileInformation &fileInfo) : IterativeDis
 	loadRecords();
 }
 
-/**
- * Destructor
- */
-SectionPlainGetter::~SectionPlainGetter()
-{
-
-}
-
 std::size_t SectionPlainGetter::getBasicInfo(std::size_t structIndex, std::vector<std::string> &desc, std::vector<std::string> &info) const
 {
 	if(structIndex >= numberOfStructures || !fileinfo.getNumberOfStoredSections())
@@ -70,7 +64,7 @@ std::size_t SectionPlainGetter::getBasicInfo(std::size_t structIndex, std::vecto
 	desc.push_back("CRC32             : ");
 	desc.push_back("MD5               : ");
 	desc.push_back("SHA256            : ");
-	info.push_back(numToStr(fileinfo.getNumberOfStoredSections()));
+	info.push_back(std::to_string(fileinfo.getNumberOfStoredSections()));
 	info.push_back(fileinfo.getSectionTableCrc32());
 	info.push_back(fileinfo.getSectionTableMd5());
 	info.push_back(fileinfo.getSectionTableSha256());
@@ -106,6 +100,7 @@ bool SectionPlainGetter::loadRecord(std::size_t structIndex, std::size_t recInde
 	record.push_back(fileinfo.getSectionNumberOfLineNumbersStr(recIndex));
 	record.push_back(fileinfo.getSectionLinkToOtherSectionStr(recIndex));
 	record.push_back(fileinfo.getSectionExtraInfoStr(recIndex));
+	record.push_back(fileinfo.getSectionEntropy(recIndex, truncFloat));
 	record.push_back(fileinfo.getSectionCrc32(recIndex));
 
 	return true;
@@ -133,3 +128,4 @@ bool SectionPlainGetter::getFlagDescriptors(std::size_t structIndex, std::vector
 }
 
 } // namespace fileinfo
+} // namespace retdec

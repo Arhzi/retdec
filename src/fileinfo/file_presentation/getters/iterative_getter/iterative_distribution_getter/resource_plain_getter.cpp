@@ -13,6 +13,7 @@
 using namespace retdec::utils;
 using namespace retdec::fileformat;
 
+namespace retdec {
 namespace fileinfo {
 
 namespace
@@ -42,14 +43,6 @@ ResourcePlainGetter::ResourcePlainGetter(FileInformation &fileInfo) : IterativeD
 	loadRecords();
 }
 
-/**
- * Destructor
- */
-ResourcePlainGetter::~ResourcePlainGetter()
-{
-
-}
-
 std::size_t ResourcePlainGetter::getBasicInfo(std::size_t structIndex, std::vector<std::string> &desc, std::vector<std::string> &info) const
 {
 	if(structIndex >= numberOfStructures || !fileinfo.getNumberOfStoredResources())
@@ -65,7 +58,7 @@ std::size_t ResourcePlainGetter::getBasicInfo(std::size_t structIndex, std::vect
 	desc.push_back("Icon MD5           : ");
 	desc.push_back("Icon SHA256        : ");
 	desc.push_back("Icon AvgHash       : ");
-	info.push_back(numToStr(fileinfo.getNumberOfStoredResources()));
+	info.push_back(std::to_string(fileinfo.getNumberOfStoredResources()));
 	info.push_back(fileinfo.getResourceIconhashCrc32());
 	info.push_back(fileinfo.getResourceIconhashMd5());
 	info.push_back(fileinfo.getResourceIconhashSha256());
@@ -82,7 +75,7 @@ bool ResourcePlainGetter::loadRecord(std::size_t structIndex, std::size_t recInd
 	}
 
 	record.clear();
-	record.push_back(numToStr(recIndex));
+	record.push_back(std::to_string(recIndex));
 	auto name = fileinfo.getResourceName(recIndex);
 	shrinkAndReplaceNonprintable(name, MAX_NAME_LENGTH);
 	const auto nameId = fileinfo.getResourceNameIdStr(recIndex, std::dec);
@@ -131,3 +124,4 @@ bool ResourcePlainGetter::getFlagDescriptors(std::size_t structIndex, std::vecto
 }
 
 } // namespace fileinfo
+} // namespace retdec

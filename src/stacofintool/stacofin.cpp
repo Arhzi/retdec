@@ -5,15 +5,17 @@
  */
 
 #include <iomanip>
-#include <iostream>
 #include <string>
 #include <vector>
 
-#include "retdec/utils/filesystem_path.h"
+#include "retdec/utils/filesystem.h"
+#include "retdec/utils/io/log.h"
+#include "retdec/utils/version.h"
 #include "retdec/stacofin/stacofin.h"
 #include "retdec/loader/image_factory.h"
 
 using namespace retdec::utils;
+using namespace retdec::utils::io;
 using namespace retdec::stacofin;
 using namespace retdec::loader;
 
@@ -22,7 +24,7 @@ using namespace retdec::loader;
  */
 void printUsage()
 {
-	std::cout << "\nStatic code detection tool.\n"
+	Log::info() << "\nStatic code detection tool.\n"
 		<< "Usage: stacofin -b BINARY_FILE YARA_FILE [YARA_FILE ...]\n\n";
 }
 
@@ -35,7 +37,7 @@ void printUsage()
 int printError(
 	const std::string &errorMessage)
 {
-	std::cerr << "Error: " << errorMessage << "\n";
+	Log::error() << Log::Error << errorMessage << "\n";
 	return 1;
 }
 
@@ -50,7 +52,7 @@ std::string referencesToString(
 {
 	std::string result;
 	for (const auto &ref : references) {
-		result += std::to_string(ref.first) + " " + ref.second + " ";
+		result += std::to_string(ref.offset) + " " + ref.name + " ";
 	}
 
 	return result;
@@ -62,22 +64,23 @@ std::string referencesToString(
  * @param detections detected functions
  */
 void printDetectionsDebug(
-	const std::vector<DetectedFunction> &detections)
+	const retdec::stacofin::DetectedFunctionsMultimap &detections)
 {
 	std::uint64_t lastAddress = 0;
-	for (const auto &detected : detections) {
-		if (detected.address == lastAddress) {
+	for (const auto& p : detections) {
+		auto& detected = p.second;
+		if (detected.getAddress() == lastAddress) {
 			for (const auto &name : detected.names) {
-				std::cout << "or " << name << "\n";
+				Log::info() << "or " << name << "\n";
 			}
 			continue;
 		}
-		lastAddress = detected.address;
+		lastAddress = detected.getAddress();
 
-		std::cout << "0x" << std::setfill('0') << std::setw(8) << std::hex
-			<< detected.address << " " << detected.names[0] << "\n";
+		Log::info() << "0x" << std::setfill('0') << std::setw(8) << std::hex
+			<< detected.getAddress() << " " << detected.names[0] << "\n";
 		for (std::size_t i = 1; i < detected.names.size(); ++i) {
-			std::cout << "or " << detected.names[i] << "\n";
+			Log::info() << "or " << detected.names[i] << "\n";
 		}
 	}
 }
@@ -88,24 +91,25 @@ void printDetectionsDebug(
  * @param detections detected functions
  */
 void printDetections(
-	const std::vector<DetectedFunction> &detections)
+	const retdec::stacofin::DetectedFunctionsMultimap &detections)
 {
 	std::uint64_t lastAddress = 0;
-	for (const auto &detected : detections) {
-		if (detected.address == lastAddress) {
+	for (const auto& p : detections) {
+		auto& detected = p.second;
+		if (detected.getAddress() == lastAddress) {
 			for (const auto &name : detected.names) {
-				std::cout << "\t\t\t" << name << " "
+				Log::info() << "\t\t\t" << name << " "
 					<< referencesToString(detected.references) << "\n";;
 			}
 			continue;
 		}
-		lastAddress = detected.address;
+		lastAddress = detected.getAddress();
 
-		std::cout << "0x" << std::hex << detected.address << " \t"
+		Log::info() << "0x" << std::hex << detected.getAddress() << " \t"
 			<< std::dec << detected.size << "\t" << detected.names[0] << " "
 			<< referencesToString(detected.references) << "\n";
 		for (std::size_t i = 1; i < detected.names.size(); ++i) {
-			std::cout << "\t\t\t" << detected.names[i] << " "
+			Log::info() << "\t\t\t" << detected.names[i] << " "
 				<< referencesToString(detected.references) << "\n";;
 		}
 	}
@@ -128,17 +132,22 @@ int doActions(
 			printUsage();
 			return 0;
 		}
+		else if (args[i] == "--version") {
+			Log::info() << retdec::utils::version::getVersionStringLong()
+					<< "\n";
+			return 0;
+		}
 		else if (args[i] == "-d" || args[i] == "--debug") {
 			debugOn = true;
 		}
 		else if (args[i] == "-b" && i + 1 < args.size()) {
 			binaryPath = args[++i];
-			if (!FilesystemPath(binaryPath).isFile()) {
+			if (!fs::is_regular_file(binaryPath)) {
 				return printError("invalid binary file '" + binaryPath + "'");
 			}
 		}
 		else {
-			if (!FilesystemPath(args[i]).isFile()) {
+			if (!fs::is_regular_file(args[i])) {
 				return printError("invalid yara file '" + args[i] + "'");
 			}
 			yaraPaths.push_back(args[i]);
@@ -159,10 +168,10 @@ int doActions(
 
 	// Print detections.
 	if (debugOn) {
-		printDetectionsDebug(codeFinder.accessDectedFunctions());
+		printDetectionsDebug(codeFinder.getAllDetections());
 	}
 	else {
-		printDetections(codeFinder.accessDectedFunctions());
+		printDetections(codeFinder.getAllDetections());
 	}
 
 	// Print total code coverage information.
@@ -171,7 +180,7 @@ int doActions(
 	for (auto it = coverage.begin(), e = coverage.end(); it != e; ++it) {
 		totalCoverage += it->getSize();
 	}
-	std::cout << "\nTotal code coverage is " << totalCoverage << " bytes.\n";
+	Log::info() << "\nTotal code coverage is " << totalCoverage << " bytes.\n";
 	return 0;
 }
 

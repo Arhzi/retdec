@@ -7,6 +7,7 @@
 #ifndef UNPACKERTOOL_ARG_HANDLER_H
 #define UNPACKERTOOL_ARG_HANDLER_H
 
+#include <cstdint>
 #include <map>
 #include <string>
 #include <vector>
@@ -52,13 +53,12 @@ struct ArgData
 struct ArgInfo
 {
 	ArgInfo(char opt, const std::string& longOpt, bool hasInput)
-		: _opt(opt), _longOpt(longOpt), _hasInput(hasInput), _data(new ArgData) ///< Constructor.
+		: _opt(opt), _longOpt(longOpt), _hasInput(hasInput), _data(new ArgData)
 	{}
 
-	~ArgInfo() ///< Destructor.
+	~ArgInfo()
 	{
-		if (_data)
-			delete _data;
+		delete _data;
 	}
 
 	char _opt; ///< Short option.

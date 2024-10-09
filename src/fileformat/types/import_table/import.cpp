@@ -10,26 +10,10 @@ namespace retdec {
 namespace fileformat {
 
 /**
- * Constructor
- */
-Import::Import() : libraryIndex(0), address(0), ordinalNumber(0), ordinalNumberIsValid(false)
-{
-
-}
-
-/**
- * Destructor
- */
-Import::~Import()
-{
-
-}
-
-/**
  * Get import name
  * @return Import name
  */
-std::string Import::getName() const
+const std::string& Import::getName() const
 {
 	return name;
 }
@@ -38,7 +22,7 @@ std::string Import::getName() const
  * Get index of library from which is import
  * @return Index of library from which is import
  */
-unsigned long long Import::getLibraryIndex() const
+std::uint64_t Import::getLibraryIndex() const
 {
 	return libraryIndex;
 }
@@ -47,7 +31,7 @@ unsigned long long Import::getLibraryIndex() const
  * Get address of import
  * @return Address of import
  */
-unsigned long long Import::getAddress() const
+std::uint64_t Import::getAddress() const
 {
 	return address;
 }
@@ -59,7 +43,7 @@ unsigned long long Import::getAddress() const
  *
  * If method returns @c false, @a importOrdinalNumber is left unchanged
  */
-bool Import::getOrdinalNumber(unsigned long long &importOrdinalNumber) const
+bool Import::getOrdinalNumber(std::uint64_t &importOrdinalNumber) const
 {
 	if(ordinalNumberIsValid)
 	{
@@ -67,6 +51,47 @@ bool Import::getOrdinalNumber(unsigned long long &importOrdinalNumber) const
 	}
 
 	return ordinalNumberIsValid;
+}
+
+/**
+ * Get import usage type
+ * @return Import usage type
+ */
+Import::UsageType Import::getUsageType() const
+{
+	return usageType;
+}
+
+/**
+ * @return @c true if import is unkown, @c false otherwise
+ */
+bool Import::isUnknown() const
+{
+	return getUsageType() == UsageType::UNKNOWN;
+}
+
+/**
+ * @return @c true if import is function, @c false otherwise
+ */
+bool Import::isFunction() const
+{
+	return getUsageType() == UsageType::FUNCTION;
+}
+
+/**
+ * @return @c true if import is object, @c false otherwise
+ */
+bool Import::isObject() const
+{
+	return getUsageType() == UsageType::OBJECT;
+}
+
+/**
+ * @return @c true if import is file, @c false otherwise
+ */
+bool Import::isFile() const
+{
+	return getUsageType() == UsageType::FILE;
 }
 
 /**
@@ -82,7 +107,7 @@ void Import::setName(std::string importName)
  * Set library index
  * @param importLibraryIndex Index of library from which is import
  */
-void Import::setLibraryIndex(unsigned long long importLibraryIndex)
+void Import::setLibraryIndex(std::uint64_t importLibraryIndex)
 {
 	libraryIndex = importLibraryIndex;
 }
@@ -91,7 +116,7 @@ void Import::setLibraryIndex(unsigned long long importLibraryIndex)
  * Set address of import
  * @param importAddress Address of import
  */
-void Import::setAddress(unsigned long long importAddress)
+void Import::setAddress(std::uint64_t importAddress)
 {
 	address = importAddress;
 }
@@ -100,10 +125,19 @@ void Import::setAddress(unsigned long long importAddress)
  * Set ordinal number of import
  * @param importOrdinalNumber Ordinal number of import
  */
-void Import::setOrdinalNumber(unsigned long long importOrdinalNumber)
+void Import::setOrdinalNumber(std::uint64_t importOrdinalNumber)
 {
 	ordinalNumber = importOrdinalNumber;
 	ordinalNumberIsValid = true;
+}
+
+/**
+ * Set import usage type
+ * @param importUsageType Symbol usage type
+ */
+void Import::setUsageType(Import::UsageType importUsageType)
+{
+	usageType = importUsageType;
 }
 
 /**

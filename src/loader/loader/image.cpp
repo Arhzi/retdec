@@ -22,10 +22,6 @@ Image::Image(const std::shared_ptr<retdec::fileformat::FileFormat>& fileFormat) 
 {
 }
 
-Image::~Image()
-{
-}
-
 Endianness Image::getEndianness() const
 {
 	return getFileFormat()->getEndianness();
@@ -292,7 +288,7 @@ const Segment* Image::getSegmentFromAddress(std::uint64_t address) const
  */
 const Segment* Image::getEpSegment()
 {
-	unsigned long long epAddress;
+	std::uint64_t epAddress;
 	if (!getFileFormat()->getEpAddress(epAddress))
 		return nullptr;
 

@@ -10,13 +10,15 @@
 #include <fstream>
 #include <initializer_list>
 #include <map>
+#include <optional>
 #include <set>
+#include <utility>
 #include <vector>
 
-#include "retdec/config/config.h"
 #include "retdec/utils/byte_value_storage.h"
 #include "retdec/utils/non_copyable.h"
 #include "retdec/fileformat/fftypes.h"
+#include "retdec/fileformat/utils/byte_array_buffer.h"
 
 namespace retdec {
 namespace fileformat {
@@ -27,12 +29,10 @@ namespace fileformat {
 
 struct LoaderErrorInfo
 {
-	LoaderErrorInfo() : loaderErrorCode(0), loaderError(nullptr), loaderErrorUserFriendly(nullptr)
-	{}
-
-	std::uint32_t loaderErrorCode;               // Loader error code, cast to uint32_t
-	const char * loaderError;
-	const char * loaderErrorUserFriendly;
+	std::uint32_t loaderErrorCode = 0;               // Loader error code, cast to uint32_t - 0 means OK
+	const char *loaderError = nullptr;
+	const char *loaderErrorUserFriendly = nullptr;
+	bool isLoadableAnyway = false;
 };
 
 /**
@@ -41,7 +41,9 @@ struct LoaderErrorInfo
 class FileFormat : public retdec::utils::ByteValueStorage, private retdec::utils::NonCopyable
 {
 	private:
-		std::ifstream auxStream;                 ///< auxiliary member for opening of input file
+		byte_array_buffer auxBuff;               ///< auxiliary input buffer
+		std::ifstream auxFStream;                ///< auxiliary input file stream
+		std::istream auxIStream;                 ///< auxiliary input stream
 		std::vector<unsigned char> *loadedBytes; ///< reference to serialized content of input file
 		LoadFlags loadFlags;                     ///< load flags for configurable file loading
 
@@ -49,7 +51,6 @@ class FileFormat : public retdec::utils::ByteValueStorage, private retdec::utils
 		/// @{
 		void init();
 		void initStream();
-		template<typename T> void initFormatArch(T derivedPtr, const retdec::config::Architecture &arch);
 		/// @}
 
 		/// @name Pure virtual initialization methods
@@ -81,13 +82,15 @@ class FileFormat : public retdec::utils::ByteValueStorage, private retdec::utils
 		RichHeader *richHeader;                                           ///< rich header
 		PdbInfo *pdbInfo;                                                 ///< information about related PDB debug file
 		CertificateTable *certificateTable;                               ///< table of certificates
+		TlsInfo *tlsInfo;                                                 ///< thread-local information
 		ElfCoreInfo *elfCoreInfo;                                         ///< information about core file structures
 		Format fileFormat;                                                ///< format of input file
 		LoaderErrorInfo _ldrErrInfo;                                      ///< loader error (e.g. Windows loader error for PE files)
 		bool stateIsValid;                                                ///< internal state of instance
 		std::vector<std::pair<std::size_t, std::size_t>> secHashInfo;     ///< information for calculation of section table hash
-		retdec::utils::Maybe<bool> signatureVerified;                     ///< indicates whether the signature is present and also verified
-		retdec::utils::RangeContainer<std::uint64_t> nonDecodableRanges;  ///< Address ranges which should not be decoded for instructions.
+		std::optional<bool> signatureVerified;                            ///< indicates whether the signature is present and also verified
+		retdec::common::RangeContainer<std::uint64_t> nonDecodableRanges;  ///< Address ranges which should not be decoded for instructions.
+		std::vector<std::pair<std::string, std::string>> anomalies;       ///< file format anomalies
 
 		/// @name Clear methods
 		/// @{
@@ -104,14 +107,20 @@ class FileFormat : public retdec::utils::ByteValueStorage, private retdec::utils
 		void setLoadedBytes(std::vector<unsigned char> *lBytes);
 		/// @}
 
-		FileFormat(std::istream &inputStream, LoadFlags loadFlags = LoadFlags::NONE);
 	public:
-		FileFormat(std::string pathToFile, LoadFlags loadFlags = LoadFlags::NONE);
+		FileFormat(const std::string & pathToFile, LoadFlags loadFlags = LoadFlags::NONE);
+		FileFormat(std::istream &inputStream, LoadFlags loadFlags = LoadFlags::NONE);
+		FileFormat(const std::uint8_t *data, std::size_t size, LoadFlags loadFlags = LoadFlags::NONE);
 		virtual ~FileFormat();
 
 		/// @name Other methods
 		/// @{
-		void initFromConfig(const retdec::config::Config &config);
+		void initArchitecture(
+				Architecture arch,
+				retdec::utils::Endianness endian = retdec::utils::Endianness::UNKNOWN,
+				std::size_t bytesPerWord = 4,
+				retdec::common::Address entryPoint = retdec::common::Address::Undefined,
+				retdec::common::Address sectionVMA = retdec::common::Address::Undefined);
 		void loadStrings();
 		void loadStrings(StringType type, std::size_t charSize);
 		void loadStrings(StringType type, std::size_t charSize, const SecSeg* secSeg);
@@ -181,7 +190,6 @@ class FileFormat : public retdec::utils::ByteValueStorage, private retdec::utils
 		std::string getSectionTableMd5() const;
 		std::string getSectionTableSha256() const;
 		std::string getPathToFile() const;
-		std::istream& getFileStream();
 		Format getFileFormat() const;
 		std::size_t getNumberOfSections() const;
 		std::size_t getNumberOfSegments() const;
@@ -191,11 +199,12 @@ class FileFormat : public retdec::utils::ByteValueStorage, private retdec::utils
 		std::size_t getFileLength() const;
 		std::size_t getLoadedFileLength() const;
 		std::size_t getOverlaySize() const;
+		bool getOverlayEntropy(double &res) const;
 		std::size_t nibblesFromBytes(std::size_t bytes) const;
 		std::size_t bytesFromNibbles(std::size_t nibbles) const;
 		std::size_t bytesFromNibblesRounded(std::size_t nibbles) const;
-		bool getOffsetFromAddress(unsigned long long &result, unsigned long long address) const;
-		bool getAddressFromOffset(unsigned long long &result, unsigned long long offset) const;
+		bool getOffsetFromAddress(std::uint64_t &result, std::uint64_t address) const;
+		bool getAddressFromOffset(std::uint64_t &result, std::uint64_t offset) const;
 		bool getBytes(std::vector<std::uint8_t> &result, unsigned long long offset, unsigned long long numberOfBytes) const;
 		bool getEpBytes(std::vector<std::uint8_t> &result, unsigned long long numberOfBytes) const;
 		bool getHexBytes(std::string &result, unsigned long long offset, unsigned long long numberOfBytes) const;
@@ -203,6 +212,7 @@ class FileFormat : public retdec::utils::ByteValueStorage, private retdec::utils
 		bool getHexBytesFromEnd(std::string &result, unsigned long long numberOfBytes) const;
 		bool getString(std::string &result, unsigned long long offset, unsigned long long numberOfBytes) const;
 		bool getStringFromEnd(std::string &result, unsigned long long numberOfBytes) const;
+		bool isObjectStretchedOverSections(std::size_t addr, std::size_t size) const;
 		const Section* getEpSection();
 		const Section* getSection(const std::string &secName) const;
 		const Section* getSection(unsigned long long secIndex) const;
@@ -223,6 +233,7 @@ class FileFormat : public retdec::utils::ByteValueStorage, private retdec::utils
 		const RichHeader* getRichHeader() const;
 		const PdbInfo* getPdbInfo() const;
 		const CertificateTable* getCertificateTable() const;
+		const TlsInfo* getTlsInfo() const;
 		const ElfCoreInfo* getElfCoreInfo() const;
 		const Symbol* getSymbol(const std::string &name) const;
 		const Symbol* getSymbol(unsigned long long address) const;
@@ -236,7 +247,7 @@ class FileFormat : public retdec::utils::ByteValueStorage, private retdec::utils
 		const Resource* getVersionResource() const;
 		bool isSignaturePresent() const;
 		bool isSignatureVerified() const;
-		const retdec::utils::RangeContainer<std::uint64_t>& getNonDecodableAddressRanges() const;
+		const retdec::common::RangeContainer<std::uint64_t>& getNonDecodableAddressRanges() const;
 		/// @}
 
 		/// @name Containers
@@ -255,6 +266,7 @@ class FileFormat : public retdec::utils::ByteValueStorage, private retdec::utils
 		const std::vector<String>& getStrings() const;
 		const std::vector<ElfNoteSecSeg>& getElfNoteSecSegs() const;
 		const std::set<std::uint64_t>& getUnknownRelocations() const;
+		const std::vector<std::pair<std::string,std::string>> &getAnomalies() const;
 		/// @}
 
 		/// @name Address interpretation methods
@@ -292,11 +304,11 @@ class FileFormat : public retdec::utils::ByteValueStorage, private retdec::utils
 		virtual bool isObjectFile() const = 0;
 		virtual bool isDll() const = 0;
 		virtual bool isExecutable() const = 0;
-		virtual bool getMachineCode(unsigned long long &result) const = 0;
-		virtual bool getAbiVersion(unsigned long long &result) const = 0;
-		virtual bool getImageBaseAddress(unsigned long long &imageBase) const = 0;
-		virtual bool getEpAddress(unsigned long long &result) const = 0;
-		virtual bool getEpOffset(unsigned long long &epOffset) const = 0;
+		virtual bool getMachineCode(std::uint64_t &result) const = 0;
+		virtual bool getAbiVersion(std::uint64_t &result) const = 0;
+		virtual bool getImageBaseAddress(std::uint64_t &imageBase) const = 0;
+		virtual bool getEpAddress(std::uint64_t &result) const = 0;
+		virtual bool getEpOffset(std::uint64_t &epOffset) const = 0;
 		virtual Architecture getTargetArchitecture() const = 0;
 		virtual std::size_t getDeclaredNumberOfSections() const = 0;
 		virtual std::size_t getDeclaredNumberOfSegments() const = 0;

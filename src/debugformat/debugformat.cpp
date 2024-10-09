@@ -6,7 +6,6 @@
 
 #define LOG_ENABLED false
 
-#include <iostream>
 #include <sstream>
 
 #include "retdec/utils/debug.h"
@@ -25,14 +24,12 @@ DebugFormat::DebugFormat()
  * @param pdbFile   Input PDB file to load debugging information from.
  * @param symtab    Symbol table.
  * @param demangler Demangled instance used for this input file.
- * @param imageBase Image base used in PDB initialization.
  */
 DebugFormat::DebugFormat(
 		retdec::loader::Image* inFile,
 		const std::string& pdbFile,
 		SymbolTable* symtab,
-		retdec::demangler::CDemangler* demangler,
-		unsigned long long imageBase)
+		retdec::demangler::Demangler* demangler)
 		:
 		_symtab(symtab),
 		_inFile(inFile),
@@ -40,19 +37,23 @@ DebugFormat::DebugFormat(
 {
 	_pdbFile = new retdec::pdbparser::PDBFile();
 	auto s = _pdbFile->load_pdb_file(pdbFile.c_str());
-	_dwarfFile = new retdec::dwarfparser::DwarfFile(_inFile->getFileFormat()->getPathToFile(), _inFile->getFileFormat());
 
 	if (s == retdec::pdbparser::PDB_STATE_OK)
 	{
 		LOG << "\n*** DebugFormat::DebugFormat(): PDB" << std::endl;
+
+		std::uint64_t imageBase = 0;
+		if (auto* pe = dynamic_cast<const fileformat::PeFormat*>(
+				inFile->getFileFormat()))
+		{
+			pe->getImageBaseAddress(imageBase);
+		}
+
 		_pdbFile->initialize(imageBase);
 		loadPdb();
 	}
-	else if (_dwarfFile->hasDwarfInfo())
-	{
-		LOG << "\n*** DebugFormat::DebugFormat(): DWARF" << std::endl;
-		loadDwarf();
-	}
+
+	loadDwarf();
 
 	loadSymtab();
 }
@@ -78,11 +79,11 @@ void DebugFormat::loadSymtab()
 	{
 		std::string funcName = it->second->getNormalizedName();
 
-		retdec::config::Function nf(funcName);
+		retdec::common::Function nf(funcName);
 
 		nf.setDemangledName(_demangler->demangleToString(funcName));
 
-		retdec::utils::Address addr = it->first;
+		retdec::common::Address addr = it->first;
 		if (_inFile->getFileFormat()->isArm() && addr % 2 != 0)
 		{
 			addr -= 1;
@@ -122,14 +123,14 @@ void DebugFormat::loadSymtab()
 	}
 }
 
-retdec::config::Function* DebugFormat::getFunction(retdec::utils::Address a)
+retdec::common::Function* DebugFormat::getFunction(retdec::common::Address a)
 {
 	auto fIt = functions.find(a);
 	return fIt != functions.end() ? &fIt->second : nullptr;
 }
 
-const retdec::config::Object* DebugFormat::getGlobalVar(
-		retdec::utils::Address a)
+const retdec::common::Object* DebugFormat::getGlobalVar(
+		retdec::common::Address a)
 {
 	return globals.getObjectByAddress(a);
 }

@@ -11,6 +11,7 @@
 using namespace retdec::utils;
 using namespace retdec::fileformat;
 
+namespace retdec {
 namespace fileinfo {
 
 /**
@@ -30,14 +31,6 @@ DataDirectoryJsonGetter::DataDirectoryJsonGetter(FileInformation &fileInfo) : It
 	commonHeaderElements.push_back("size");
 }
 
-/**
- * Destructor
- */
-DataDirectoryJsonGetter::~DataDirectoryJsonGetter()
-{
-
-}
-
 std::size_t DataDirectoryJsonGetter::getBasicInfo(std::size_t structIndex, std::vector<std::string> &desc, std::vector<std::string> &info) const
 {
 	if(structIndex >= numberOfStructures || !fileinfo.getNumberOfStoredDataDirectories())
@@ -49,7 +42,7 @@ std::size_t DataDirectoryJsonGetter::getBasicInfo(std::size_t structIndex, std::
 	info.clear();
 
 	desc.push_back("numberOfDataDirectories");
-	info.push_back(numToStr(fileinfo.getNumberOfStoredDataDirectories()));
+	info.push_back(std::to_string(fileinfo.getNumberOfStoredDataDirectories()));
 
 	return info.size();
 }
@@ -62,7 +55,7 @@ bool DataDirectoryJsonGetter::getRecord(std::size_t structIndex, std::size_t rec
 	}
 
 	record.clear();
-	record.push_back(numToStr(recIndex));
+	record.push_back(std::to_string(recIndex));
 	record.push_back(fileinfo.getDataDirectoryType(recIndex));
 	record.push_back(fileinfo.getDataDirectoryAddressStr(recIndex, hexWithPrefix));
 	record.push_back(fileinfo.getDataDirectorySizeStr(recIndex, hexWithPrefix));
@@ -84,3 +77,4 @@ bool DataDirectoryJsonGetter::getFlags(std::size_t structIndex, std::size_t recI
 }
 
 } // namespace fileinfo
+} // namespace retdec

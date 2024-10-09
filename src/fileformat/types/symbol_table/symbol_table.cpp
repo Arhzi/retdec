@@ -13,22 +13,6 @@ namespace retdec {
 namespace fileformat {
 
 /**
- * Constructor
- */
-SymbolTable::SymbolTable() : table(), name()
-{
-
-}
-
-/**
- * Destructor
- */
-SymbolTable::~SymbolTable()
-{
-
-}
-
-/**
  * Get number of symbols in table
  * @return Number of symbols in table
  */
@@ -325,10 +309,10 @@ void SymbolTable::dump(std::string &dumpTable) const
 					usageType = "UNKN";
 			}
 
-			ret << "; " << item->getName() << " (addr: " << (item->getAddress(aux) ? numToStr(aux, std::hex) : "-") <<
+			ret << "; " << item->getName() << " (addr: " << (item->getAddress(aux) ? intToHexString(aux) : "-") <<
 				", index: " << item->getIndex() << ", type: " << type << ", usageType: " << usageType <<
-				", section: " << (item->getLinkToSection(aux) ? numToStr(aux) : "-") <<
-				", size: " << (item->getSize(aux) ? numToStr(aux) : "-") << ")\n";
+				", section: " << (item->getLinkToSection(aux) ? std::to_string(aux) : "-") <<
+				", size: " << (item->getSize(aux) ? std::to_string(aux) : "-") << ")\n";
 		}
 	}
 

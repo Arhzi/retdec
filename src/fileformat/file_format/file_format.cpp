@@ -7,27 +7,29 @@
 #include <algorithm>
 #include <cassert>
 #include <climits>
+#include <cstdint>
 #include <cstring>
 #include <functional>
-#include <iostream>
 #include <sstream>
 
-#include <pelib/PeLibInc.h>
-
-#include "retdec/crypto/crypto.h"
 #include "retdec/utils/conversion.h"
 #include "retdec/utils/file_io.h"
 #include "retdec/utils/string.h"
 #include "retdec/utils/system.h"
+#include "retdec/utils/io/log.h"
 #include "retdec/fileformat/file_format/file_format.h"
+#include "retdec/fileformat/utils/byte_array_buffer.h"
 #include "retdec/fileformat/file_format/intel_hex/intel_hex_format.h"
 #include "retdec/fileformat/file_format/raw_data/raw_data_format.h"
 #include "retdec/fileformat/types/strings/character_iterator.h"
 #include "retdec/fileformat/utils/conversions.h"
+#include "retdec/fileformat/utils/crypto.h"
 #include "retdec/fileformat/utils/file_io.h"
 #include "retdec/fileformat/utils/other.h"
+#include "retdec/pelib/PeLibInc.h"
 
 using namespace retdec::utils;
+using namespace retdec::utils::io;
 using namespace PeLib;
 
 namespace retdec {
@@ -82,7 +84,7 @@ bool isAddressFromRegion(const SecSeg *actualRegion, const SecSeg *newRegion, st
 		return false;
 	}
 
-	unsigned long long newRegionSize;
+	unsigned long long newRegionSize = 0;
 	if(!newRegion->getSizeInMemory(newRegionSize))
 	{
 		newRegionSize = newRegion->getSizeInFile();
@@ -113,11 +115,35 @@ bool isAddressFromRegion(const SecSeg *actualRegion, const SecSeg *newRegion, st
 
 /**
  * Constructor
+ * @param pathToFile Path to input file
+ * @param loadFlags Load flags
+ */
+FileFormat::FileFormat(const std::string & pathToFile, LoadFlags loadFlags) :
+		auxBuff(nullptr, nullptr),
+		auxIStream(&auxBuff),
+		loadedBytes(&bytes),
+		loadFlags(loadFlags),
+		filePath(pathToFile),
+		fileStream(auxFStream),
+		_ldrErrInfo()
+{
+	auxFStream.open(filePath, std::ifstream::binary);
+	stateIsValid = auxFStream.is_open();
+	init();
+}
+
+/**
+ * Constructor
  * @param inputStream Stream which represents input file
  * @param loadFlags Load flags
  */
-FileFormat::FileFormat(std::istream &inputStream, LoadFlags loadFlags) : loadedBytes(&bytes),
-	loadFlags(loadFlags), fileStream(inputStream), _ldrErrInfo()
+FileFormat::FileFormat(std::istream &inputStream, LoadFlags loadFlags) :
+		auxBuff(nullptr, nullptr),
+		auxIStream(&auxBuff),
+		loadedBytes(&bytes),
+		loadFlags(loadFlags),
+		fileStream(inputStream),
+		_ldrErrInfo()
 {
 	stateIsValid = !inputStream.fail();
 	init();
@@ -125,14 +151,19 @@ FileFormat::FileFormat(std::istream &inputStream, LoadFlags loadFlags) : loadedB
 
 /**
  * Constructor
- * @param pathToFile Path to input file
+ * @param data Input data.
+ * @param size Input data size.
  * @param loadFlags Load flags
  */
-FileFormat::FileFormat(std::string pathToFile, LoadFlags loadFlags) : loadedBytes(&bytes),
-	loadFlags(loadFlags), filePath(pathToFile), fileStream(auxStream), _ldrErrInfo()
+FileFormat::FileFormat(const std::uint8_t *data, std::size_t size, LoadFlags loadFlags) :
+		auxBuff(data, size),
+		auxIStream(&auxBuff),
+		loadedBytes(&bytes),
+		loadFlags(loadFlags),
+		fileStream(auxIStream),
+		_ldrErrInfo()
 {
-	auxStream.open(filePath, std::ifstream::binary);
-	stateIsValid = auxStream.is_open();
+	stateIsValid = true;
 	init();
 }
 
@@ -156,6 +187,7 @@ void FileFormat::init()
 	richHeader = nullptr;
 	pdbInfo = nullptr;
 	certificateTable = nullptr;
+	tlsInfo = nullptr;
 	elfCoreInfo = nullptr;
 	fileFormat = Format::UNDETECTABLE;
 	stateIsValid = readFile(fileStream, bytes) && stateIsValid;
@@ -167,9 +199,9 @@ void FileFormat::init()
 	}
 	else
 	{
-		crc32 = retdec::crypto::getCrc32(bytes.data(), bytes.size());
-		md5 = retdec::crypto::getMd5(bytes.data(), bytes.size());
-		sha256 = retdec::crypto::getSha256(bytes.data(), bytes.size());
+		crc32 = retdec::fileformat::getCrc32(bytes.data(), bytes.size());
+		md5 = retdec::fileformat::getMd5(bytes.data(), bytes.size());
+		sha256 = retdec::fileformat::getSha256(bytes.data(), bytes.size());
 	}
 	initStream();
 }
@@ -181,51 +213,6 @@ void FileFormat::initStream()
 {
 	fileStream.clear();
 	fileStream.seekg(0);
-}
-
-/**
- * Provides architecture information for formats which do not store such information eg. Intel HEX
- * @param derivedPtr Pointer to derived FileFormat class
- * @param arch Architecture information
- */
-template<typename T> void FileFormat::initFormatArch(T derivedPtr, const retdec::config::Architecture &arch)
-{
-	if(!derivedPtr)
-	{
-		return;
-	}
-
-	derivedPtr->setBytesPerWord(arch.getByteSize());
-
-	if(arch.isEndianLittle())
-	{
-		derivedPtr->setEndianness(Endianness::LITTLE);
-	}
-	else if(arch.isEndianBig())
-	{
-		derivedPtr->setEndianness(Endianness::BIG);
-	}
-
-	if(arch.isX86())
-	{
-		derivedPtr->setTargetArchitecture(Architecture::X86);
-	}
-	if(arch.isArmOrThumb())
-	{
-		derivedPtr->setTargetArchitecture(Architecture::ARM);
-	}
-	if(arch.isPpc())
-	{
-		derivedPtr->setTargetArchitecture(Architecture::POWERPC);
-	}
-	if(arch.isMips())
-	{
-		derivedPtr->setTargetArchitecture(Architecture::MIPS);
-	}
-	if(arch.isPic32())
-	{
-		derivedPtr->setTargetArchitecture(Architecture::MIPS);
-	}
 }
 
 /**
@@ -246,6 +233,7 @@ void FileFormat::clear()
 	delete richHeader;
 	delete pdbInfo;
 	delete certificateTable;
+	delete tlsInfo;
 	delete elfCoreInfo;
 
 	for(auto *item : sections)
@@ -328,9 +316,9 @@ void FileFormat::computeSectionTableHashes()
 
 	if(!data.empty())
 	{
-		sectionCrc32 = retdec::crypto::getCrc32(data.data(), data.size());
-		sectionMd5 = retdec::crypto::getMd5(data.data(), data.size());
-		sectionSha256 = retdec::crypto::getSha256(data.data(), data.size());
+		sectionCrc32 = retdec::fileformat::getCrc32(data.data(), data.size());
+		sectionMd5 = retdec::fileformat::getMd5(data.data(), data.size());
+		sectionSha256 = retdec::fileformat::getSha256(data.data(), data.size());
 	}
 }
 
@@ -347,31 +335,36 @@ void FileFormat::setLoadedBytes(std::vector<unsigned char> *lBytes)
 
 /**
  * If fileformat is Intel HEX or raw binary then it does not contain
- * critical information like architecture, endianness or word size.
+ * critical information like architecture, endianness or std::uint16_t size.
  * However, fileformat users expect it to contain this information.
  * Therefore, this method needs to be called to set these critical information.
- * @param config Config information
  */
-void FileFormat::initFromConfig(const retdec::config::Config& config)
+void FileFormat::initArchitecture(
+		Architecture arch,
+		retdec::utils::Endianness endian,
+		std::size_t bytesPerWord,
+		retdec::common::Address entryPoint,
+		retdec::common::Address sectionVMA)
 {
 	if(IntelHexFormat *ihex = dynamic_cast<IntelHexFormat*>(this))
 	{
-		initFormatArch(ihex, config.architecture);
+		ihex->setTargetArchitecture(arch);
+		ihex->setBytesPerWord(bytesPerWord);
+		ihex->setEndianness(endian);
 	}
 	else if(RawDataFormat *raw = dynamic_cast<RawDataFormat*>(this))
 	{
-		initFormatArch(raw, config.architecture);
-		// Set section address
-		Address tmpAddr = config.getSectionVMA();
-		if(tmpAddr.isDefined())
+		raw->setTargetArchitecture(arch);
+		raw->setBytesPerWord(bytesPerWord);
+		raw->setEndianness(endian);
+
+		if(sectionVMA.isDefined())
 		{
-			raw->setBaseAddress(tmpAddr);
+			raw->setBaseAddress(sectionVMA);
 		}
-		// Set entry point
-		tmpAddr = config.getEntryPoint();
-		if(tmpAddr.isDefined())
+		if(entryPoint.isDefined())
 		{
-			raw->setEntryPoint(tmpAddr);
+			raw->setEntryPoint(entryPoint);
 		}
 	}
 }
@@ -997,15 +990,6 @@ std::string FileFormat::getPathToFile() const
 }
 
 /**
- * Get stream of input file
- * @return Stream of input file
- */
-std::istream& FileFormat::getFileStream()
-{
-	return fileStream;
-}
-
-/**
  * Get file format
  * @return File format of input file
  * @retval Format::UNDETECTABLE Instance is not in consistent state
@@ -1092,6 +1076,24 @@ std::size_t FileFormat::getOverlaySize() const
 }
 
 /**
+ * Get overlay data entropy
+ * @param res Variable to store the result to
+ * @return @c true if entropy calculation succeeded, @c false otherwise
+ */
+bool FileFormat::getOverlayEntropy(double &res) const
+{
+	const auto overlaySize = getOverlaySize();
+	const auto declSize = getDeclaredFileLength();
+	const auto &bytes = getBytes();
+	if (overlaySize == 0 || declSize == 0 || bytes.size() < declSize + overlaySize)
+	{
+		return false;
+	}
+	res = computeDataEntropy(bytes.data() + declSize, overlaySize);
+	return true;
+}
+
+/**
  * Count number of nibbles from number of bytes
  * @param bytes Number of bytes
  * @return Number of nibbles
@@ -1131,7 +1133,7 @@ std::size_t FileFormat::bytesFromNibblesRounded(std::size_t nibbles) const
  *
  * If method returns @c false, @a result is left unchanged
  */
-bool FileFormat::getOffsetFromAddress(unsigned long long &result, unsigned long long address) const
+bool FileFormat::getOffsetFromAddress(std::uint64_t &result, std::uint64_t address) const
 {
 	const auto *secSeg = getSectionOrSegmentFromAddress(address);
 	if(!secSeg)
@@ -1139,7 +1141,13 @@ bool FileFormat::getOffsetFromAddress(unsigned long long &result, unsigned long 
 		return false;
 	}
 
-	result = secSeg->getOffset() + (address - secSeg->getAddress());
+	auto secSegAddr = secSeg->getAddress();
+	if (secSegAddr > address)
+	{
+		return false;
+	}
+
+	result = secSeg->getOffset() + (address - secSegAddr);
 	return true;
 }
 
@@ -1151,7 +1159,7 @@ bool FileFormat::getOffsetFromAddress(unsigned long long &result, unsigned long 
  *
  * If method returns @c false, @a result is left unchanged
  */
-bool FileFormat::getAddressFromOffset(unsigned long long &result, unsigned long long offset) const
+bool FileFormat::getAddressFromOffset(std::uint64_t &result, std::uint64_t offset) const
 {
 	const auto *secSeg = getSectionOrSegmentFromOffset(offset);
 	if(!secSeg)
@@ -1159,7 +1167,13 @@ bool FileFormat::getAddressFromOffset(unsigned long long &result, unsigned long 
 		return false;
 	}
 
-	result = secSeg->getAddress() + (offset - secSeg->getOffset());
+	auto secSegOffset = secSeg->getOffset();
+	if (secSegOffset > offset)
+	{
+		return false;
+	}
+
+	result = secSeg->getAddress() + (offset - secSegOffset);
 	return true;
 }
 
@@ -1198,7 +1212,7 @@ bool FileFormat::getBytes(std::vector<std::uint8_t> &result, unsigned long long 
  */
 bool FileFormat::getEpBytes(std::vector<std::uint8_t> &result, unsigned long long numberOfBytes) const
 {
-	unsigned long long epOffset;
+	std::uint64_t epOffset;
 	if(stateIsValid && getEpOffset(epOffset))
 	{
 		return getBytes(result, epOffset, numberOfBytes);
@@ -1234,7 +1248,7 @@ bool FileFormat::getHexBytes(std::string &result, unsigned long long offset, uns
  */
 bool FileFormat::getHexEpBytes(std::string &result, unsigned long long numberOfBytes) const
 {
-	unsigned long long epOffset;
+	std::uint64_t epOffset;
 	if(stateIsValid && getEpOffset(epOffset))
 	{
 		return getHexBytes(result, epOffset, numberOfBytes);
@@ -1286,12 +1300,40 @@ bool FileFormat::getStringFromEnd(std::string &result, unsigned long long number
 }
 
 /**
+ * Find out if object is stretched over multiple sections
+ * @param addr Addres of object
+ * @param size Object size
+ * @return @c true if object is stretched over multiple sections, @c false otherwise
+ */
+bool FileFormat::isObjectStretchedOverSections(std::size_t addr, std::size_t size) const
+{
+	for (const auto sec : sections)
+	{
+		if (!sec)
+		{
+			continue;
+		}
+
+		std::size_t secStart = sec->getOffset();
+		std::size_t secEnd = secStart + sec->getSizeInFile();
+		std::size_t addrEnd = addr + size;
+		if (secStart <= addr && addr < secEnd)
+		{
+			return (addrEnd > secEnd);
+		}
+	}
+
+	return false;
+}
+
+/**
  * Get information about section containing entry point
  * @return Pointer to EP section if file has entry point and EP section was detected, @c nullptr otherwise
  */
+ // useless?
 const Section* FileFormat::getEpSection()
 {
-	unsigned long long ep;
+	std::uint64_t ep;
 	if(!getEpOffset(ep))
 	{
 		return nullptr;
@@ -1375,7 +1417,7 @@ const Section* FileFormat::getLastButOneSection() const
  */
 const Segment* FileFormat::getEpSegment()
 {
-	unsigned long long epAddress;
+	std::uint64_t epAddress;
 	if(!getEpAddress(epAddress))
 	{
 		return nullptr;
@@ -1539,11 +1581,20 @@ const PdbInfo* FileFormat::getPdbInfo() const
 
 /**
  * Get information about certificate table
- * @return Pointer to certificate table of @c nullptr if file has no certificates
+ * @return Pointer to certificate table or @c nullptr if file has no certificates
  */
 const CertificateTable* FileFormat::getCertificateTable() const
 {
 	return certificateTable;
+}
+
+/**
+ * Get information about TLS
+ * @return Pointer to TLS information or @c nullptr if file has no certificates
+ */
+const TlsInfo* FileFormat::getTlsInfo() const
+{
+	return tlsInfo;
 }
 
 /**
@@ -1707,7 +1758,7 @@ const Resource* FileFormat::getVersionResource() const
  */
 bool FileFormat::isSignaturePresent() const
 {
-	return signatureVerified.isDefined();
+	return signatureVerified.has_value();
 }
 
 /**
@@ -1716,14 +1767,14 @@ bool FileFormat::isSignaturePresent() const
  */
 bool FileFormat::isSignatureVerified() const
 {
-	return signatureVerified.isDefined() && signatureVerified.getValue();
+	return signatureVerified.has_value() && signatureVerified.value();
 }
 
 /**
  * Get non-decodable address ranges.
  * @return Non-decodable address ranges.
  */
-const retdec::utils::RangeContainer<std::uint64_t>& FileFormat::getNonDecodableAddressRanges() const
+const retdec::common::RangeContainer<std::uint64_t>& FileFormat::getNonDecodableAddressRanges() const
 {
 	return nonDecodableRanges;
 }
@@ -1883,6 +1934,15 @@ const std::set<std::uint64_t> &FileFormat::getUnknownRelocations() const
 }
 
 /**
+ * Get all anomalies
+ * @return Reference to anomalies
+ */
+const std::vector<std::pair<std::string,std::string>> &FileFormat::getAnomalies() const
+{
+	return anomalies;
+}
+
+/**
  * Get integer (@a x bytes) located at provided address using the specified endian or default file endian
  * @param address Address to get integer from
  * @param x Number of bytes for conversion
@@ -2004,8 +2064,8 @@ bool FileFormat::get8ByteOffset(std::uint64_t offset, std::uint64_t &res, retdec
 
 /**
  * Get long double from the specified offset
- * If system has 80-bit (10-byte) long double, copy data directly.
- * Else convert 80-bit (10-byte) long double into 64-bit (8-byte) double.
+ * If system has 80-bit (10 - byte) long double, copy data directly.
+ * Else convert 80-bit (10 - byte) long double into 64-bit (8 - uint8_t) double.
  * @param offset Offset to get double from
  * @param res Result double
  * @return Status of operation (@c true if all is OK, @c false otherwise)
@@ -2279,7 +2339,7 @@ void FileFormat::dump()
 {
 	std::string output;
 	dump(output);
-	std::cout << output;
+	Log::info() << output;
 }
 
 /**
@@ -2376,13 +2436,13 @@ void FileFormat::dump(std::string &dumpFile)
 	ret << "; Endianness: " << sEndian << "\n";
 	ret << "; Type: " << sType << "\n";
 
-	unsigned long long addr;
+	std::uint64_t addr;
 	if(getEpAddress(addr))
 	{
 		ret << "; Entry point address: " << std::hex << addr << "\n";
 	}
 
-	unsigned long long offset;
+	std::uint64_t offset;
 	if(getEpOffset(offset))
 	{
 		ret << "; Entry point offset: " << offset << "\n";
@@ -2504,7 +2564,7 @@ void FileFormat::dumpRegionsValidity()
 {
 	std::string output;
 	dumpRegionsValidity(output);
-	std::cout << output;
+	Log::info() << output;
 }
 
 /**
@@ -2546,7 +2606,7 @@ void FileFormat::dumpResourceTree()
 {
 	std::string output;
 	dumpResourceTree(output);
-	std::cout << output;
+	Log::info() << output;
 }
 
 void FileFormat::dumpResourceTree(std::string &dumpStr)

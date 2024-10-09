@@ -9,23 +9,8 @@
 
 using namespace retdec::fileformat;
 
+namespace retdec {
 namespace fileinfo {
-
-/**
- * Constructor
- */
-RichHeader::RichHeader() : header(nullptr)
-{
-
-}
-
-/**
- * Destructor
- */
-RichHeader::~RichHeader()
-{
-
-}
 
 /**
  * Get number of records in header
@@ -70,21 +55,10 @@ std::string RichHeader::getKeyStr(std::ios_base &(* format)(std::ios_base &)) co
  * @param position Index of selected record from header (indexed from 0)
  * @return Major version of linker
  */
-std::string RichHeader::getRecordMajorVersionStr(std::size_t position) const
+std::string RichHeader::getRecordProductIdStr(std::size_t position) const
 {
 	const auto *record = header ? header->getRecord(position) : nullptr;
-	return record ? getNumberAsString(record->getMajorVersion()) : "";
-}
-
-/**
- * Get minor version
- * @param position Index of selected record from header (indexed from 0)
- * @return Minor version of linker
- */
-std::string RichHeader::getRecordMinorVersionStr(std::size_t position) const
-{
-	const auto *record = header ? header->getRecord(position) : nullptr;
-	return record ? getNumberAsString(record->getMinorVersion()) : "";
+	return record ? getNumberAsString(record->getProductId()) : "";
 }
 
 /**
@@ -92,10 +66,10 @@ std::string RichHeader::getRecordMinorVersionStr(std::size_t position) const
  * @param position Index of selected record from header (indexed from 0)
  * @return Build version of linker
  */
-std::string RichHeader::getRecordBuildVersionStr(std::size_t position) const
+std::string RichHeader::getRecordProductBuildStr(std::size_t position) const
 {
 	const auto *record = header ? header->getRecord(position) : nullptr;
-	return record ? getNumberAsString(record->getBuildVersion()) : "";
+	return record ? getNumberAsString(record->getProductBuild()) : "";
 }
 
 /**
@@ -110,12 +84,47 @@ std::string RichHeader::getRecordNumberOfUsesStr(std::size_t position) const
 }
 
 /**
+ * Retrieve the product name
+ * @param position Index of selected record from header (indexed from 0)
+ * @return Product name as std::string
+ */
+std::string RichHeader::getRecordProductNameStr(std::size_t position) const
+{
+	const auto *record = header ? header->getRecord(position) : nullptr;
+	return record ? record->getProductName() : "";
+}
+
+/**
+ * Retrieve the Visual Studio name
+ * @param position Index of selected record from header (indexed from 0)
+ * @return Visual Studio name as std::string
+ */
+std::string RichHeader::getRecordVisualStudioNameStr(std::size_t position) const
+{
+	const auto *record = header ? header->getRecord(position) : nullptr;
+	return record ? record->getVisualStudioName() : "";
+}
+
+/**
  * Get raw bytes
  * @return Raw bytes of rich header.
  */
 std::vector<std::uint8_t> RichHeader::getRawBytes() const
 {
 	return header ? header->getBytes() : std::vector<std::uint8_t>{};
+}
+
+std::string RichHeader::getSha256() const
+{
+	return header ? header->getSha256() : "";
+}
+std::string RichHeader::getCrc32() const
+{
+	return header ? header->getCrc32() : "";
+}
+std::string RichHeader::getMd5() const
+{
+	return header ? header->getMd5() : "";
 }
 
 /**
@@ -136,4 +145,7 @@ bool RichHeader::hasRecords() const
 	return header ? header->hasRecords() : false;
 }
 
+
+
 } // namespace fileinfo
+} // namespace retdec

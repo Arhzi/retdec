@@ -10,22 +10,6 @@ namespace retdec {
 namespace fileformat {
 
 /**
- * Constructor
- */
-Export::Export() : address(0), ordinalNumber(0), ordinalNumberIsValid(false)
-{
-
-}
-
-/**
- * Destructor
- */
-Export::~Export()
-{
-
-}
-
-/**
  * Get export name
  * @return Export name
  */
@@ -38,7 +22,7 @@ std::string Export::getName() const
  * Get export address
  * @return Export address
  */
-unsigned long long Export::getAddress() const
+std::uint64_t Export::getAddress() const
 {
 	return address;
 }
@@ -50,7 +34,7 @@ unsigned long long Export::getAddress() const
  *
  * If method returns @c false, @a exportOrdinalNumber is left unchanged
  */
-bool Export::getOrdinalNumber(unsigned long long &exportOrdinalNumber) const
+bool Export::getOrdinalNumber(std::uint64_t &exportOrdinalNumber) const
 {
 	if(ordinalNumberIsValid)
 	{
@@ -73,7 +57,7 @@ void Export::setName(std::string exportName)
  * Set export address
  * @param exportAddress Export address
  */
-void Export::setAddress(unsigned long long exportAddress)
+void Export::setAddress(std::uint64_t exportAddress)
 {
 	address = exportAddress;
 }
@@ -82,7 +66,7 @@ void Export::setAddress(unsigned long long exportAddress)
  * Set export ordinal number
  * @param exportOrdinalNumber Export ordinal number
  */
-void Export::setOrdinalNumber(unsigned long long exportOrdinalNumber)
+void Export::setOrdinalNumber(std::uint64_t exportOrdinalNumber)
 {
 	ordinalNumber = exportOrdinalNumber;
 	ordinalNumberIsValid = true;

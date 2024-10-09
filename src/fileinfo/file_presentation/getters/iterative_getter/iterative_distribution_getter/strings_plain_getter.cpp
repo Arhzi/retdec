@@ -12,6 +12,7 @@
 using namespace retdec::utils;
 using namespace retdec::fileformat;
 
+namespace retdec {
 namespace fileinfo {
 
 namespace
@@ -39,14 +40,6 @@ StringsPlainGetter::StringsPlainGetter(FileInformation &fileInfo) : IterativeDis
 	loadRecords();
 }
 
-/**
- * Destructor
- */
-StringsPlainGetter::~StringsPlainGetter()
-{
-
-}
-
 std::size_t StringsPlainGetter::getBasicInfo(std::size_t structIndex, std::vector<std::string> &desc, std::vector<std::string> &info) const
 {
 	if(structIndex >= numberOfStructures || !fileinfo.hasStrings())
@@ -58,7 +51,7 @@ std::size_t StringsPlainGetter::getBasicInfo(std::size_t structIndex, std::vecto
 	info.clear();
 
 	desc.push_back("Number of strings: ");
-	info.push_back(numToStr(fileinfo.getNumberOfDetectedStrings()));
+	info.push_back(std::to_string(fileinfo.getNumberOfDetectedStrings()));
 
 	return info.size();
 }
@@ -73,7 +66,7 @@ bool StringsPlainGetter::loadRecord(std::size_t structIndex, std::size_t recInde
 	const auto& strings = fileinfo.getStrings();
 
 	record.clear();
-	record.push_back(numToStr(recIndex));
+	record.push_back(std::to_string(recIndex));
 	record.push_back(strings.getStringFileOffsetStr(recIndex, hexWithPrefix));
 	record.push_back(strings.getStringTypeStr(recIndex));
 	record.push_back(replaceNonprintableChars(strings.getStringSectionName(recIndex)));
@@ -96,3 +89,4 @@ bool StringsPlainGetter::getFlagDescriptors(std::size_t structIndex, std::vector
 }
 
 } // namespace fileinfo
+} // namespace retdec

@@ -8,11 +8,13 @@
 #define RETDEC_UTILS_STRING_H
 
 #include <algorithm>
+#include <cstdint>
 #include <limits>
 #include <map>
 #include <string>
 #include <utility>
 #include <vector>
+#include <set>
 
 namespace retdec {
 namespace utils {
@@ -51,6 +53,10 @@ std::string toLower(std::string str);
 std::string toUpper(std::string str);
 
 std::string toWide(const std::string &str, std::string::size_type length);
+std::string unicodeToAscii(const std::uint8_t *bytes, std::size_t nBytes);
+std::string unicodeToAscii(const std::uint8_t *bytes, std::size_t nBytes, std::size_t &nRead);
+std::string readNullTerminatedAscii(const std::uint8_t *bytes, std::size_t bytesLen,
+							std::size_t offset = 0, std::size_t maxBytes = 0, bool failOnExceed = false);
 
 std::string trim(std::string str, const std::string &toTrim = " \t\r\n\v");
 
@@ -103,6 +109,7 @@ bool startsWith(const std::string &str, const String &withWhat) {
 
 bool endsWith(const std::string &str, const std::string &withWhat);
 bool endsWith(const std::string &str, char withWhat);
+bool endsWith(const std::string &str, const std::set<std::string>& withWhat);
 bool hasSubstringOnPosition(const std::string &str,
 	const std::string &withWhat,
 	std::string::size_type position);
@@ -155,10 +162,6 @@ void removeSuffix(std::string &n, const std::string &suffix = "_");
 std::string removeSuffixRet(const std::string &n,
 	const std::string &suffix = "_");
 
-// TODO: This is the same as toHex() in conversion.h
-// Use implementation in conversion.h, but make it to take uint64_t or template.
-std::string toHexString(unsigned long long val);
-
 std::string normalizeName(const std::string &name);
 std::string normalizeNamePrefix(const std::string &name);
 
@@ -170,6 +173,8 @@ std::string removeConsecutiveSpaces(const std::string& str);
 std::string asEscapedCString(const WideStringType& value, std::size_t charSize);
 
 std::string removeComments(const std::string& str, char commentChar);
+
+std::string extractVersion(const std::string& input);
 
 } // namespace utils
 } // namespace retdec

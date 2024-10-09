@@ -425,6 +425,45 @@ IsUserDefinedFuncReturnsTrueWhenFuncIsUserDefined) {
 }
 
 //
+// isDecompilerDefinedFunc()
+//
+
+TEST_F(JSONConfigTests,
+IsDecompilerDefinedFuncReturnsFalseWhenThereIsNoInfoForFunc) {
+	auto config = JSONConfig::empty();
+
+	ASSERT_FALSE(config->isDecompilerDefinedFunc("my_func"));
+}
+
+TEST_F(JSONConfigTests,
+IsDecompilerDefinedFuncReturnsFalseWhenFuncIsDynamicallyLinked) {
+	auto config = JSONConfig::fromString(R"({
+		"functions": [
+			{
+				"name": "my_func",
+				"fncType": "dynamicallyLinked"
+			}
+		]
+	})");
+
+	ASSERT_FALSE(config->isDecompilerDefinedFunc("my_func"));
+}
+
+TEST_F(JSONConfigTests,
+IsDecompilerDefinedFuncReturnsTrueWhenFuncIsDecompilerDefined) {
+	auto config = JSONConfig::fromString(R"({
+		"functions": [
+			{
+				"name": "my_func",
+				"fncType": "decompilerDefined"
+			}
+		]
+	})");
+
+	ASSERT_TRUE(config->isDecompilerDefinedFunc("my_func"));
+}
+
+//
 // isStaticallyLinkedFunc()
 //
 
@@ -921,38 +960,6 @@ GetDemangledNameOfFuncReturnsCorrectValueWhenFuncHasDemangledName) {
 }
 
 //
-// getFuncsFixedWithLLVMIRFixer()
-//
-
-TEST_F(JSONConfigTests,
-GetFuncsFixedWithLLVMIRFixerReturnsEmptySetWhenThereAreNoFuncs) {
-	auto config = JSONConfig::empty();
-
-	ASSERT_EQ(StringSet(), config->getFuncsFixedWithLLVMIRFixer());
-}
-
-TEST_F(JSONConfigTests,
-GetFuncsFixedWithLLVMIRFixerReturnsCorrectValueWhenThereAreFixedFuncs) {
-	auto config = JSONConfig::fromString(R"({
-		"functions": [
-			{
-				"name": "my_func1",
-				"wasFixed": false
-			},
-			{
-				"name": "my_func2",
-				"wasFixed": true
-			}
-		]
-	})");
-
-	ASSERT_EQ(
-		StringSet({"my_func2"}),
-		config->getFuncsFixedWithLLVMIRFixer()
-	);
-}
-
-//
 // getClassNames()
 //
 
@@ -1393,11 +1400,13 @@ GetDebugModuleNamesReturnsCorrectSetWhenDebugInfoIsAvailable) {
 		"functions": [
 			{
 				"name": "my_func1",
-				"srcFileName": "module1.c"
+				"srcFileName": "module1.c",
+				"startAddr": "0x1234"
 			},
 			{
 				"name": "my_func2",
-				"srcFileName": "module2.c"
+				"srcFileName": "module2.c",
+				"startAddr": "0x5678"
 			}
 		]
 	})");
@@ -1558,54 +1567,6 @@ GetDebugNameForLocalVarReturnsCorrectValueWhenLocalVarIsParameterWithAssignedDeb
 	})");
 
 	ASSERT_EQ("a", config->getDebugNameForLocalVar("my_func", "a_408004"));
-}
-
-//
-// getPrefixesOfFuncsToBeRemoved()
-//
-
-TEST_F(JSONConfigTests,
-GetPrefixesOfFuncsToBeRemovedReturnsEmptySetWhenThereAreNoPrefixes) {
-	auto config = JSONConfig::empty();
-
-	ASSERT_EQ(StringSet(), config->getPrefixesOfFuncsToBeRemoved());
-}
-
-TEST_F(JSONConfigTests,
-GetPrefixesOfFuncsToBeRemovedReturnsCorrectValueWhenThereArePrefixes) {
-	auto config = JSONConfig::fromString(R"({
-		"decompParams": {
-			"frontendFunctions": [
-				"prefix1",
-				"prefix2"
-			]
-		}
-	})");
-
-	ASSERT_EQ(
-		StringSet({"prefix1", "prefix2"}),
-		config->getPrefixesOfFuncsToBeRemoved()
-	);
-}
-
-//
-// getFrontendRelease()
-//
-
-TEST_F(JSONConfigTests,
-GetFrontendReleaseReturnsEmptyStringWhenThereIsNoRelease) {
-	auto config = JSONConfig::empty();
-
-	ASSERT_EQ("", config->getFrontendRelease());
-}
-
-TEST_F(JSONConfigTests,
-GetFrontendReleaseReturnsCorrectStringWhenReleaseIsSet) {
-	auto config = JSONConfig::fromString(R"({
-		"frontendVersion": "v1.0"
-	})");
-
-	ASSERT_EQ("v1.0", config->getFrontendRelease());
 }
 
 //

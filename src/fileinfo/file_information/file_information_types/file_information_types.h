@@ -7,7 +7,6 @@
 #ifndef FILEINFO_FILE_INFORMATION_FILE_INFORMATION_TYPES_FILE_INFORMATION_TYPES_H
 #define FILEINFO_FILE_INFORMATION_FILE_INFORMATION_TYPES_FILE_INFORMATION_TYPES_H
 
-#include "fileinfo/file_information/file_information_types/certificate_table.h"
 #include "fileinfo/file_information/file_information_types/data_directory.h"
 #include "fileinfo/file_information/file_information_types/dotnet_info.h"
 #include "fileinfo/file_information/file_information_types/dynamic_section/dynamic_section.h"
@@ -26,5 +25,7 @@
 #include "fileinfo/file_information/file_information_types/rich_header.h"
 #include "fileinfo/file_information/file_information_types/strings.h"
 #include "fileinfo/file_information/file_information_types/symbol_table/symbol_table.h"
+#include "fileinfo/file_information/file_information_types/tls_info.h"
+#include "fileinfo/file_information/file_information_types/visual_basic_info.h"
 
 #endif

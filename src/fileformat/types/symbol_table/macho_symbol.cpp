@@ -15,22 +15,6 @@ namespace retdec {
 namespace fileformat {
 
 /**
- * Constructor
- */
-MachOSymbol::MachOSymbol()
-{
-
-}
-
-/**
- * Destructor
- */
-MachOSymbol::~MachOSymbol()
-{
-
-}
-
-/**
  * Makes symbol a function if conditions are met (call only after setAllValues)
  * @param fileParser Pointer to FileFormat parser
  */
@@ -193,7 +177,7 @@ Export MachOSymbol::getAsExport() const
 	Export exportSym;
 	if(name.empty())
 	{
-		exportSym.setName("exported_function_" + numToStr(value, std::hex));
+		exportSym.setName("exported_function_" + intToHexString(value));
 	}
 	else
 	{

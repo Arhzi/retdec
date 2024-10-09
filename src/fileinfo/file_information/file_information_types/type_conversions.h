@@ -12,6 +12,7 @@
 
 #include "retdec/utils/conversion.h"
 
+namespace retdec {
 namespace fileinfo {
 
 std::string getBinaryRepresentation(unsigned long long number, unsigned long long numberOfBits);
@@ -25,15 +26,16 @@ std::string getBinaryRepresentation(unsigned long long number, unsigned long lon
  * For signed numeric types is incorrect value their minimal value (e.g. INT_MIN).
  * For unsigned numeric types is incorrect value their maximal value (e.g. UINT_MAX).
  */
-template<typename N> std::string getNumberAsString(N number, std::ios_base &(* format)(std::ios_base &) = std::dec)
+template<typename N> std::string getNumberAsString(
+		N number,
+		std::ios_base &(* format)(std::ios_base &) = std::dec)
 {
-	if(!std::numeric_limits<N>::is_signed && number != std::numeric_limits<N>::max())
+	if((!std::numeric_limits<N>::is_signed && number != std::numeric_limits<N>::max())
+		|| (std::numeric_limits<N>::is_signed && number != std::numeric_limits<N>::min()))
 	{
-		return retdec::utils::numToStr(number, format);
-	}
-	else if(std::numeric_limits<N>::is_signed && number != std::numeric_limits<N>::min())
-	{
-		return retdec::utils::numToStr(number, format);
+		std::ostringstream ss;
+		ss << format << number;
+		return ss.str();
 	}
 
 	return "";
@@ -51,5 +53,6 @@ template<typename N> inline bool indexIsValid(const std::vector<N> &list, std::s
 }
 
 } // namespace fileinfo
+} // namespace retdec
 
 #endif

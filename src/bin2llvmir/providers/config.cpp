@@ -4,8 +4,6 @@
  * @copyright (c) 2017 Avast Software, licensed under the MIT license
  */
 
-#include <iostream>
-
 #include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/Module.h>
 
@@ -14,8 +12,8 @@
 #include "retdec/bin2llvmir/providers/demangler.h"
 #include "retdec/bin2llvmir/utils/debug.h"
 #include "retdec/bin2llvmir/utils/llvm.h"
+#include "retdec/utils/string.h"
 
-using namespace retdec::utils;
 using namespace llvm;
 
 namespace retdec {
@@ -27,44 +25,29 @@ namespace bin2llvmir {
 //=============================================================================
 //
 
+retdec::config::Config _emptyConfig;
+
+Config::Config(retdec::config::Config& c)
+		: _configDB(c)
+{
+
+}
+
 Config Config::empty(llvm::Module* m)
 {
-	Config config;
+	_emptyConfig = retdec::config::Config();
+	Config config(_emptyConfig);
 	config._module = m;
 	return config;
 }
 
-Config Config::fromFile(llvm::Module* m, const std::string& path)
+Config Config::fromConfig(llvm::Module* m, retdec::config::Config& c)
 {
-	Config config;
+	Config config(c);
 	config._module = m;
-	config._configPath = path;
-	if (!config._configPath.empty())
-	{
-		// Can throw an exception, but it is catched by bin2llvmirl.
-		config._configDB.readJsonFile(config._configPath);
-	}
 
-	for (auto& s : config.getConfig().structures)
-	{
-		llvm_utils::stringToLlvmType(m->getContext(), s.getLlvmIr());
-	}
-
-	// TODO: needed?
-	if (config.getConfig().tools.isPic32())
-	{
-		config.getConfig().architecture.setIsPic32();
-	}
-
-	return config;
-}
-
-Config Config::fromJsonString(llvm::Module* m, const std::string& json)
-{
-	Config config;
-	config._module = m;
-	config._configDB.readJsonString(json);
-
+	// Create all structures defined in the config.
+	//
 	for (auto& s : config.getConfig().structures)
 	{
 		llvm_utils::stringToLlvmType(m->getContext(), s.getLlvmIr());
@@ -85,9 +68,11 @@ Config Config::fromJsonString(llvm::Module* m, const std::string& json)
  */
 void Config::doFinalization()
 {
-	if (!_configPath.empty())
+	tagFunctionsWithUsedCryptoGlobals();
+
+	if (!_configDB.parameters.getOutputConfigFile().empty())
 	{
-		_configDB.generateJsonFile(_configPath);
+		_configDB.generateJsonFile(_configDB.parameters.getOutputConfigFile());
 	}
 }
 
@@ -101,29 +86,35 @@ const retdec::config::Config& Config::getConfig() const
 	return _configDB;
 }
 
-llvm::Function* Config::getLlvmFunction(Address startAddr)
+llvm::Function* Config::getLlvmFunction(common::Address startAddr)
 {
 	auto fnc = getConfigFunction(startAddr);
 	return fnc ? _module->getFunction(fnc->getName()) : nullptr;
 }
 
-retdec::utils::Address Config::getFunctionAddress(
+retdec::common::Address Config::getFunctionAddress(
 		const llvm::Function* fnc)
 {
-	retdec::config::Function* cf = getConfigFunction(fnc);
-	return cf ? cf->getStart() : retdec::utils::Address();
+	retdec::common::Function* cf = getConfigFunction(fnc);
+	return cf ? cf->getStart() : retdec::common::Address();
 }
 
-retdec::config::Function* Config::getConfigFunction(
+retdec::common::Function* Config::getConfigFunction(
 		const llvm::Function* fnc)
 {
-	return fnc ? _configDB.functions.getFunctionByName(fnc->getName()) : nullptr;
+	// TODO: remove horrible const_cast
+	return fnc
+		? const_cast<retdec::common::Function*>(
+				_configDB.functions.getFunctionByName(fnc->getName()))
+		: nullptr;
 }
 
-retdec::config::Function* Config::getConfigFunction(
-		retdec::utils::Address startAddr)
+retdec::common::Function* Config::getConfigFunction(
+		retdec::common::Address startAddr)
 {
-	return _configDB.functions.getFunctionByStartAddress(startAddr);
+	// TODO: remove horrible const_cast
+	return const_cast<retdec::common::Function*>(
+			_configDB.functions.getFunctionByStartAddress(startAddr));
 }
 
 llvm::Function* Config::getIntrinsicFunction(IntrinsicFunctionCreatorPtr f)
@@ -141,19 +132,19 @@ llvm::Function* Config::getIntrinsicFunction(IntrinsicFunctionCreatorPtr f)
 	}
 }
 
-const retdec::config::Object* Config::getConfigGlobalVariable(
+const retdec::common::Object* Config::getConfigGlobalVariable(
 		const llvm::GlobalVariable* gv)
 {
 	return gv ? _configDB.globals.getObjectByName(gv->getName()) : nullptr;
 }
 
-const retdec::config::Object* Config::getConfigGlobalVariable(
-		retdec::utils::Address address)
+const retdec::common::Object* Config::getConfigGlobalVariable(
+		retdec::common::Address address)
 {
 	return _configDB.globals.getObjectByAddress(address);
 }
 
-llvm::GlobalVariable* Config::getLlvmGlobalVariable(Address address)
+llvm::GlobalVariable* Config::getLlvmGlobalVariable(common::Address address)
 {
 	auto glob = _configDB.globals.getObjectByAddress(address);
 	return glob ? _module->getGlobalVariable(glob->getName()) : nullptr;
@@ -166,7 +157,7 @@ llvm::GlobalVariable* Config::getLlvmGlobalVariable(Address address)
  */
 llvm::GlobalVariable* Config::getLlvmGlobalVariable(
 		const std::string& name,
-		retdec::utils::Address address)
+		retdec::common::Address address)
 {
 	if (auto* gv = _module->getGlobalVariable(name))
 	{
@@ -182,12 +173,12 @@ llvm::GlobalVariable* Config::getLlvmGlobalVariable(
 	}
 }
 
-retdec::utils::Address Config::getGlobalAddress(
+retdec::common::Address Config::getGlobalAddress(
 		const llvm::GlobalVariable* gv)
 {
 	assert(gv);
 	auto* cgv = gv ? _configDB.globals.getObjectByName(gv->getName()) : nullptr;
-	return cgv ? cgv->getStorage().getAddress() : retdec::utils::Address();
+	return cgv ? cgv->getStorage().getAddress() : retdec::common::Address();
 }
 
 bool Config::isGlobalVariable(const llvm::Value* val)
@@ -196,7 +187,7 @@ bool Config::isGlobalVariable(const llvm::Value* val)
 	return getConfigGlobalVariable(gv) != nullptr;
 }
 
-const retdec::config::Object* Config::getConfigLocalVariable(
+const retdec::common::Object* Config::getConfigLocalVariable(
 		const llvm::Value* val)
 {
 	auto* a = dyn_cast_or_null<AllocaInst>(val);
@@ -213,7 +204,7 @@ const retdec::config::Object* Config::getConfigLocalVariable(
 	return cl && cl->getStorage().isUndefined() ? cl : nullptr;
 }
 
-retdec::config::Object* Config::getConfigStackVariable(
+retdec::common::Object* Config::getConfigStackVariable(
 		const llvm::Value* val)
 {
 	auto* a = dyn_cast_or_null<AllocaInst>(val);
@@ -226,7 +217,7 @@ retdec::config::Object* Config::getConfigStackVariable(
 	{
 		return nullptr;
 	}
-	auto* cl = const_cast<retdec::config::Object*>(
+	auto* cl = const_cast<retdec::common::Object*>(
 			cf->locals.getObjectByName(a->getName()));
 	return cl && cl->getStorage().isStack() ? cl : nullptr;
 }
@@ -245,11 +236,41 @@ llvm::AllocaInst* Config::getLlvmStackVariable(
 		return nullptr;
 	}
 
-	for (auto& p: cf->locals)
+	for (auto& l: cf->locals)
 	{
-		auto& l = p.second;
 		int off = 0;
 		if (l.getStorage().isStack(off) && off == offset)
+		{
+			for (auto& b : *fnc)
+			for (auto& i : b)
+			{
+				if (AllocaInst* a = dyn_cast<AllocaInst>(&i))
+				{
+					if (a->getName() == l.getName())
+					{
+						return a;
+					}
+				}
+			}
+		}
+	}
+
+	return nullptr;
+}
+
+llvm::AllocaInst* Config::getLlvmStackVariable(
+		llvm::Function* fnc,
+		const std::string& realName)
+{
+	auto* cf = getConfigFunction(fnc);
+	if (cf == nullptr)
+	{
+		return nullptr;
+	}
+
+	for (auto& l: cf->locals)
+	{
+		if (l.getRealName() == realName)
 		{
 			for (auto& b : *fnc)
 			for (auto& i : b)
@@ -277,25 +298,25 @@ bool Config::isStackVariable(const llvm::Value* val)
 	return getConfigStackVariable(val) != nullptr;
 }
 
-retdec::utils::Maybe<int> Config::getStackVariableOffset(
+std::optional<int> Config::getStackVariableOffset(
 		const llvm::Value* val)
 {
 	auto* sv = getConfigStackVariable(val);
 	return sv
-			? retdec::utils::Maybe<int>(sv->getStorage().getStackOffset())
-			: retdec::utils::Maybe<int>();
+			? std::optional<int>(sv->getStorage().getStackOffset())
+			: std::nullopt;
 }
 
-retdec::config::Object* Config::insertGlobalVariable(
+const retdec::common::Object* Config::insertGlobalVariable(
 		const llvm::GlobalVariable* gv,
-		retdec::utils::Address address,
+		retdec::common::Address address,
 		bool fromDebug,
 		const std::string& realName,
 		const std::string& cryptoDesc)
 {
-	retdec::config::Object cgv(
+	retdec::common::Object cgv(
 			gv->getName(),
-			retdec::config::Storage::inMemory(address));
+			retdec::common::Storage::inMemory(address));
 	cgv.setIsFromDebug(fromDebug);
 	cgv.setRealName(realName);
 	cgv.setCryptoDescription(cryptoDesc);
@@ -305,13 +326,15 @@ retdec::config::Object* Config::insertGlobalVariable(
 		cgv.type.setIsWideString(true);
 	}
 	auto p = _configDB.globals.insert(cgv);
-	return &p.first->second;
+
+	return &(*p.first);
 }
 
-retdec::config::Object* Config::insertStackVariable(
+const retdec::common::Object* Config::insertStackVariable(
 		const llvm::AllocaInst* sv,
 		int offset,
-		bool fromDebug)
+		bool fromDebug,
+		const std::string& realName)
 {
 	auto* cf = getConfigFunction(sv->getFunction());
 
@@ -326,21 +349,28 @@ retdec::config::Object* Config::insertStackVariable(
 		return nullptr;
 	}
 
-	retdec::config::Object local(
+	retdec::common::Object local(
 			sv->getName(),
-			retdec::config::Storage::onStack(offset));
-	local.setRealName(sv->getName());
+			retdec::common::Storage::onStack(offset));
+	if (realName.empty())
+	{
+		local.setRealName(sv->getName());
+	}
+	else
+	{
+		local.setRealName(realName);
+	}
 	local.setIsFromDebug(fromDebug);
 	local.type.setLlvmIr(llvmObjToString(sv->getType()));
 
 	auto p = cf->locals.insert(local);
-	return &p.first->second;
+	return &(*p.first);
 }
 
-retdec::config::Function* Config::insertFunction(
+const retdec::common::Function* Config::insertFunction(
 		const llvm::Function* fnc,
-		retdec::utils::Address start,
-		retdec::utils::Address end,
+		retdec::common::Address start,
+		retdec::common::Address end,
 		bool fromDebug)
 {
 	std::string dm;
@@ -349,14 +379,14 @@ retdec::config::Function* Config::insertFunction(
 		dm = old->getDemangledName();
 	}
 
-	retdec::config::Function cf(fnc->getName());
+	retdec::common::Function cf(fnc->getName());
 	cf.setDemangledName(dm);
 	cf.setIsFromDebug(fromDebug);
 	cf.setStartEnd(start, end);
 
 	if (cf.getDemangledName().empty())
 	{
-		retdec::demangler::CDemangler* d = DemanglerProvider::getDemangler(_module);
+		Demangler* d = DemanglerProvider::getDemangler(_module);
 		if (d)
 		{
 			auto s = d->demangleToString(fnc->getName());
@@ -368,19 +398,19 @@ retdec::config::Function* Config::insertFunction(
 	}
 
 	auto p = _configDB.functions.insert(cf);
-	return &p.first->second;
+	return &(*p.first);
 }
 
-retdec::config::Function* Config::renameFunction(
-		retdec::config::Function* fnc,
+retdec::common::Function* Config::renameFunction(
+		retdec::common::Function* fnc,
 		const std::string& name)
 {
-	retdec::config::Function cf = *fnc;
+	retdec::common::Function cf = *fnc;
 	cf.setName(name);
 
 	if (cf.getDemangledName().empty())
 	{
-		retdec::demangler::CDemangler* d = DemanglerProvider::getDemangler(_module);
+		Demangler* d = DemanglerProvider::getDemangler(_module);
 		if (d)
 		{
 			auto s = d->demangleToString(fnc->getName());
@@ -393,128 +423,24 @@ retdec::config::Function* Config::renameFunction(
 
 	_configDB.functions.erase(fnc->getName());
 	auto p = _configDB.functions.insert(cf);
-	return &p.first->second;
+
+	// TODO: remove horrible const_cast
+	return const_cast<retdec::common::Function*>(&(*p.first));
 }
 
-const retdec::config::Object* Config::getConfigRegister(
+const retdec::common::Object* Config::getConfigRegister(
 		const llvm::Value* val)
 {
 	auto* gv = dyn_cast_or_null<GlobalVariable>(val);
 	return gv ? _configDB.registers.getObjectByName(gv->getName()) : nullptr;
 }
 
-retdec::utils::Maybe<unsigned> Config::getConfigRegisterNumber(
+std::optional<unsigned> Config::getConfigRegisterNumber(
 		const llvm::Value* val)
 {
-	retdec::utils::Maybe<unsigned> undefVal;
+	std::optional<unsigned> undefVal;
 	auto* r = getConfigRegister(val);
 	return r ? r->getStorage().getRegisterNumber() : undefVal;
-}
-
-llvm::GlobalVariable* Config::getLlvmRegister(
-		const std::string& name)
-{
-	auto* cr = _configDB.registers.getObjectByRealName(name);
-	return cr ? _module->getNamedGlobal(cr->getName()) : nullptr;
-}
-
-bool Config::isRegister(const llvm::Value* val)
-{
-	return getConfigRegister(val) != nullptr;
-}
-
-/**
- * @return @c True if the the provided LLVM value @a val is a flag register,
- *         i.e. it is a register with @c i1 type. @c False otherwise.
- */
-bool Config::isFlagRegister(const llvm::Value* val)
-{
-	return isRegister(val)
-			&& val->getType()->getPointerElementType()->isIntegerTy(1);
-}
-
-/**
- * TODO: Right now this is based on name comparisons with known stack
- * pointer register names. We should use info from ABI or config instead.
- */
-bool Config::isStackPointerRegister(const llvm::Value* val)
-{
-	if (!isRegister(val))
-	{
-		return false;
-	}
-
-	auto& arch = getConfig().architecture;
-
-	std::string n = val->getName();
-	return n == "esp"
-			|| (n == "r1" && arch.isPpc())
-			|| n == "sp"
-			|| n == "rsp";
-}
-
-bool Config::isGeneralPurposeRegister(const llvm::Value* val)
-{
-	auto* r = getConfigRegister(val);
-	if (r == nullptr)
-	{
-		return false;
-	}
-	if (getConfig().architecture.isMipsOrPic32())
-	{
-		// TODO
-//		return r->getStorage().getRegisterClass() == "gpregs";
-		auto rn = r->getStorage().getRegisterNumber();
-		return MIPS_REG_0 <= rn && rn <= MIPS_REG_31;
-	}
-	else if (getConfig().architecture.isArmOrThumb())
-	{
-		// TODO
-//		return r->getStorage().getRegisterClass() == "regs";
-		auto rn = r->getStorage().getRegisterNumber();
-		return ARM_REG_R0 <= rn && rn <= ARM_REG_R12;
-	}
-	else if (getConfig().architecture.isPpc())
-	{
-		// TODO
-//		return r->getStorage().getRegisterClass() == "gpregs";
-		auto rn = r->getStorage().getRegisterNumber();
-		return PPC_REG_R0 <= rn && rn <= PPC_REG_R31;
-	}
-	else if (getConfig().architecture.isX86())
-	{
-		// TODO: this whole thif is bad
-//		return r->getStorage().getRegisterClass() == "gpr";
-		auto n = r->getName();
-		return n == "eax" || n == "ebx" || n == "ecx" || n == "edx"
-				|| n == "esp" || n == "ebp" || n == "esi" || n == "edi";
-	}
-	else
-	{
-		return false;
-	}
-}
-
-/**
- * TODO: bad, fix/remove.
- */
-bool Config::isFloatingPointRegister(const llvm::Value* val)
-{
-	auto* gv = dyn_cast_or_null<GlobalVariable>(val);
-	auto* r = getConfigRegister(val);
-	if (r == nullptr || gv == nullptr)
-	{
-		return false;
-	}
-
-	if (getConfig().architecture.isMipsOrPic32())
-	{
-		return gv->getValueType()->isFloatingPointTy();
-	}
-	else
-	{
-		return false;
-	}
 }
 
 /**
@@ -535,10 +461,10 @@ llvm::GlobalVariable* Config::getGlobalDummy()
 	return _globalDummy;
 }
 
-utils::FilesystemPath Config::getOutputDirectory()
+fs::path Config::getOutputDirectory()
 {
-	FilesystemPath fsp(getConfig().parameters.getOutputFile());
-	return fsp.getParentPath();
+	fs::path fsp(getConfig().parameters.getOutputFile());
+	return fs::canonical(fsp).parent_path();
 }
 
 void Config::setLlvmCallPseudoFunction(llvm::Function* f)
@@ -631,24 +557,6 @@ llvm::CallInst* Config::isLlvmX87DataStorePseudoFunctionCall(llvm::Value* c)
 	return cc && cc->getCalledValue() == _x87DataStoreFunction ? cc : nullptr;
 }
 
-void Config::setLlvmX87TagStorePseudoFunction(llvm::Function* f)
-{
-	_x87TagStoreFunction = f;
-}
-llvm::Function* Config::getLlvmX87TagStorePseudoFunction() const
-{
-	return _x87TagStoreFunction;
-}
-bool Config::isLlvmX87TagStorePseudoFunction(llvm::Value* f)
-{
-	return _x87TagStoreFunction == f;
-}
-llvm::CallInst* Config::isLlvmX87TagStorePseudoFunctionCall(llvm::Value* c)
-{
-	auto* cc = dyn_cast_or_null<CallInst>(c);
-	return cc && cc->getCalledValue() == _x87TagStoreFunction ? cc : nullptr;
-}
-
 void Config::setLlvmX87DataLoadPseudoFunction(llvm::Function* f)
 {
 	_x87DataLoadFunction = f;
@@ -667,35 +575,15 @@ llvm::CallInst* Config::isLlvmX87DataLoadPseudoFunctionCall(llvm::Value* c)
 	return cc && cc->getCalledValue() == _x87DataLoadFunction ? cc : nullptr;
 }
 
-void Config::setLlvmX87TagLoadPseudoFunction(llvm::Function* f)
-{
-	_x87TagLoadFunction = f;
-}
-llvm::Function* Config::getLlvmX87TagLoadPseudoFunction() const
-{
-	return _x87TagLoadFunction;
-}
-bool Config::isLlvmX87TagLoadPseudoFunction(llvm::Value* f)
-{
-	return _x87TagLoadFunction == f;
-}
-llvm::CallInst* Config::isLlvmX87TagLoadPseudoFunctionCall(llvm::Value* c)
-{
-	auto* cc = dyn_cast_or_null<CallInst>(c);
-	return cc && cc->getCalledValue() == _x87TagLoadFunction ? cc : nullptr;
-}
-
 llvm::CallInst* Config::isLlvmX87StorePseudoFunctionCall(llvm::Value* c)
 {
 	if (auto* cc = isLlvmX87DataStorePseudoFunctionCall(c)) return cc;
-	if (auto* cc = isLlvmX87TagStorePseudoFunctionCall(c)) return cc;
 	return nullptr;
 }
 
 llvm::CallInst* Config::isLlvmX87LoadPseudoFunctionCall(llvm::Value* c)
 {
 	if (auto* cc = isLlvmX87DataLoadPseudoFunctionCall(c)) return cc;
-	if (auto* cc = isLlvmX87TagLoadPseudoFunctionCall(c)) return cc;
 	return nullptr;
 }
 
@@ -738,7 +626,7 @@ llvm::CallInst* Config::isPseudoAsmFunctionCall(llvm::Value* c)
  * \return \c True if pattern was found, \c false otherwise.
  */
 bool Config::getCryptoPattern(
-		retdec::utils::Address addr,
+		retdec::common::Address addr,
 		std::string& name,
 		std::string& description,
 		llvm::Type*& type) const
@@ -757,12 +645,17 @@ bool Config::getCryptoPattern(
 				continue;
 			}
 
-			unsigned elemCount = m.getSize();
+			auto elemCount = m.getSize();
+			if (!elemCount.has_value())
+			{
+				continue;
+			}
+
 			Type* elemType = Type::getInt8Ty(_module->getContext());
 
 			if (m.isEntrySizeDefined())
 			{
-				elemCount /= m.getEntrySize();
+				elemCount = elemCount.value() / m.getEntrySize().value();
 				if (m.isTypeFloatingPoint() && m.getEntrySize() == 8)
 				{
 					elemType = Type::getDoubleTy(_module->getContext());
@@ -783,10 +676,10 @@ bool Config::getCryptoPattern(
 				{
 					elemType = Type::getIntNTy(
 							_module->getContext(),
-							m.getEntrySize() * 8);
+							m.getEntrySize().value() * 8);
 				}
 			}
-			auto d = elemCount > 0 ? elemCount : 1;
+			auto d = elemCount.value() > 0 ? elemCount.value() : 1;
 			type = ArrayType::get(elemType, d);
 			name = retdec::utils::appendHexRet(p.getName() + "_at", addr);
 			description = p.getDescription();
@@ -798,6 +691,41 @@ bool Config::getCryptoPattern(
 	return false;
 }
 
+void Config::tagFunctionsWithUsedCryptoGlobals()
+{
+	for (GlobalVariable& lgv : _module->getGlobalList())
+	{
+		auto* cgv = getConfigGlobalVariable(&lgv);
+		if (cgv == nullptr || cgv->getCryptoDescription().empty())
+		{
+			continue;
+		}
+		for (auto* user : lgv.users())
+		{
+			if (auto* i = dyn_cast_or_null<Instruction>(user))
+			{
+				if (auto* cf = getConfigFunction(i->getFunction()))
+				{
+					cf->usedCryptoConstants.insert(cgv->getCryptoDescription());
+				}
+			}
+			else if (auto* e = dyn_cast_or_null<ConstantExpr>(user))
+			{
+				for (auto* u : e->users())
+				{
+					if (auto* i = dyn_cast_or_null<Instruction>(u))
+					{
+						if (auto* cf = getConfigFunction(i->getFunction()))
+						{
+							cf->usedCryptoConstants.insert(cgv->getCryptoDescription());
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
 //
 //=============================================================================
 //  ConfigProvider
@@ -806,17 +734,9 @@ bool Config::getCryptoPattern(
 
 std::map<llvm::Module*, Config> ConfigProvider::_module2config;
 
-Config* ConfigProvider::addConfigFile(llvm::Module* m, const std::string& path)
+Config* ConfigProvider::addConfig(llvm::Module* m, retdec::config::Config& c)
 {
-	auto p = _module2config.emplace(m, Config::fromFile(m, path));
-	return &p.first->second;
-}
-
-Config* ConfigProvider::addConfigJsonString(
-		llvm::Module* m,
-		const std::string& json)
-{
-	auto p = _module2config.emplace(m, Config::fromJsonString(m, json));
+	auto p = _module2config.emplace(m, Config::fromConfig(m, c));
 	return &p.first->second;
 }
 

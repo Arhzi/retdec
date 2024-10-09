@@ -16,6 +16,7 @@ using namespace PeLib;
 using namespace retdec::cpdetect;
 using namespace retdec::fileformat;
 
+namespace retdec {
 namespace fileinfo {
 
 namespace
@@ -30,23 +31,25 @@ const unsigned long long PE_16_FLAGS_SIZE = 16;
 /**
  * Constructor
  * @param pathToInputFile Path to input file
+ * @param dllListFile Path to text file containing list of OS DLLs
  * @param finfo Instance of class for storing information about file
  * @param searchPar Parameters for detection of used compiler (or packer)
  * @param loadFlags Load flags
  */
-PeDetector::PeDetector(std::string pathToInputFile, FileInformation &finfo, retdec::cpdetect::DetectParams &searchPar, retdec::fileformat::LoadFlags loadFlags) :
-	FileDetector(pathToInputFile, finfo, searchPar, loadFlags)
+PeDetector::PeDetector(
+		const std::string & pathToInputFile,
+		const std::string & dllListFile,
+		FileInformation &finfo,
+		retdec::cpdetect::DetectParams &searchPar,
+		retdec::fileformat::LoadFlags loadFlags)
+		: FileDetector(pathToInputFile, finfo, searchPar, loadFlags)
 {
-	fileParser = peParser = std::make_shared<PeWrapper>(fileInfo.getPathToFile(), loadFlags);
+	fileParser = peParser = std::make_shared<PeWrapper>(fileInfo.getPathToFile(), dllListFile, loadFlags);
 	loaded = peParser->isInValidState();
-}
 
-/**
- * Destructor
- */
-PeDetector::~PeDetector()
-{
-
+	// Propagate information about failed load of the DLL list file
+	if(peParser->dllListFailedToLoad())
+		finfo.setDepsListFailedToLoad(dllListFile);
 }
 
 /**
@@ -101,7 +104,7 @@ void PeDetector::getFileFlags()
  */
 void PeDetector::getDllFlags()
 {
-	unsigned long long flags;
+	std::uint64_t flags;
 	if(!peParser->getDllFlags(flags))
 	{
 		return;
@@ -181,7 +184,7 @@ void PeDetector::getCoffSymbols()
  */
 void PeDetector::getRelocationTableInfo()
 {
-	unsigned long long relocs = 0;
+	std::uint64_t relocs = 0;
 	if(peParser->getNumberOfRelocations(relocs))
 	{
 		RelocationTable relTable;
@@ -269,10 +272,9 @@ void PeDetector::getSections()
 											"section can be written to"};
 	const std::string flagsAbbv[flagsSize] = {"b", "E", "i", "u", "l", "t", "g", purgeableAbbv, "L",
 											"P", "R", "d", "c", "p", "s", "x", "r", "w"};
-	FileSection fs;
-
 	for(unsigned long long i = 0; i < storedSections; ++i)
 	{
+		FileSection fs;
 		if(!peParser->getFileSection(i, fs))
 		{
 			continue;
@@ -337,23 +339,37 @@ void PeDetector::getDotnetInfo()
 	fileInfo.setDotnetTypeRefhashSha256(peParser->getTypeRefhashSha256());
 }
 
+/**
+ * Get information about .NET
+ */
+void PeDetector::getVisualBasicInfo()
+{
+	std::uint64_t version;
+	if (!peParser->isVisualBasic(version))
+	{
+		return;
+	}
+	fileInfo.setVisualBasicUsed(true);
+	fileInfo.setVisualBasicInfo(peParser->getVisualBasicInfo());
+}
+
 void PeDetector::detectFileClass()
 {
-	switch(peParser->getPeClass())
+	switch(peParser->getBits())
 	{
-		case PEFILE32:
-			fileInfo.setFileClass("32-bit");
-			break;
-		case PEFILE64:
+		case 64:
 			fileInfo.setFileClass("64-bit");
 			break;
-		default:;
+
+		case 32:
+			fileInfo.setFileClass("32-bit");
+			break;
 	}
 }
 
 void PeDetector::detectArchitecture()
 {
-	unsigned long long machineType = 0;
+	std::uint64_t machineType = 0;
 	if(!peParser->getMachineCode(machineType))
 	{
 		return;
@@ -486,6 +502,11 @@ void PeDetector::detectFileType()
 	fileInfo.setFileType(peParser->getTypeOfFile());
 }
 
+void PeDetector::getTimestamps()
+{
+	fileInfo.pe_timestamps = peParser->getTimestamps();
+}
+
 void PeDetector::getAdditionalInfo()
 {
 	getHeaderInfo();
@@ -494,7 +515,8 @@ void PeDetector::getAdditionalInfo()
 	getCoffSymbols();
 	getRelocationTableInfo();
 	getDotnetInfo();
-
+	getVisualBasicInfo();
+	getTimestamps();
 	/* In future we can detect more information about PE files:
 		- TimeDateStamp
 		- MajorLinkerVersion
@@ -526,7 +548,8 @@ void PeDetector::getAdditionalInfo()
  */
 retdec::cpdetect::CompilerDetector* PeDetector::createCompilerDetector() const
 {
-	return new PeCompiler(*peParser, cpParams, fileInfo.toolInfo);
+	return new CompilerDetector(*peParser, cpParams, fileInfo.toolInfo);
 }
 
 } // namespace fileinfo
+} // namespace retdec

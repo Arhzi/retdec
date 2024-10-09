@@ -9,7 +9,7 @@
 
 #include <cassert>
 
-#include "retdec/utils/address.h"
+#include "retdec/common/address.h"
 #include "retdec/fileformat/file_format/file_format.h"
 
 namespace retdec {
@@ -63,7 +63,7 @@ class RawDataFormat : public FileFormat
 	public:
 		RawDataFormat(std::istream &inputStream, LoadFlags loadFlags = LoadFlags::NONE);
 		RawDataFormat(const std::string &filePath, LoadFlags loadFlags = LoadFlags::NONE);
-		virtual ~RawDataFormat() override;
+		RawDataFormat(const std::uint8_t *data, std::size_t size, LoadFlags loadFlags = LoadFlags::NONE);
 
 		/// @name Byte value storage methods
 		/// @{
@@ -80,11 +80,11 @@ class RawDataFormat : public FileFormat
 		virtual bool isObjectFile() const override;
 		virtual bool isDll() const override;
 		virtual bool isExecutable() const override;
-		virtual bool getMachineCode(unsigned long long &result) const override;
-		virtual bool getAbiVersion(unsigned long long &result) const override;
-		virtual bool getImageBaseAddress(unsigned long long &imageBase) const override;
-		virtual bool getEpAddress(unsigned long long &result) const override;
-		virtual bool getEpOffset(unsigned long long &result) const override;
+		virtual bool getMachineCode(std::uint64_t &result) const override;
+		virtual bool getAbiVersion(std::uint64_t &result) const override;
+		virtual bool getImageBaseAddress(std::uint64_t &imageBase) const override;
+		virtual bool getEpAddress(std::uint64_t &result) const override;
+		virtual bool getEpOffset(std::uint64_t &result) const override;
 		virtual Architecture getTargetArchitecture() const override;
 		virtual std::size_t getDeclaredNumberOfSections() const override;
 		virtual std::size_t getDeclaredNumberOfSegments() const override;
@@ -103,8 +103,8 @@ class RawDataFormat : public FileFormat
 		void setEndianness(retdec::utils::Endianness e);
 		void setBytesPerWord(std::size_t b);
 		void setBytesLength(std::size_t l);
-		void setEntryPoint(retdec::utils::Address entryPoint);
-		void setBaseAddress(retdec::utils::Address baseAddress);
+		void setEntryPoint(retdec::common::Address entryPoint);
+		void setBaseAddress(retdec::common::Address baseAddress);
 		/// @}
 
 		/**

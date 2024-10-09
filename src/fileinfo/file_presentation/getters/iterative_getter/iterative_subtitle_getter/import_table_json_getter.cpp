@@ -12,6 +12,7 @@
 using namespace retdec::utils;
 using namespace retdec::fileformat;
 
+namespace retdec {
 namespace fileinfo {
 
 /**
@@ -27,19 +28,12 @@ ImportTableJsonGetter::ImportTableJsonGetter(FileInformation &fileInfo) : Iterat
 	subtitle = "imports";
 	commonHeaderElements.push_back("index");
 	commonHeaderElements.push_back("name");
+	commonHeaderElements.push_back("usageType");
 	commonHeaderElements.push_back("libraryName");
 	commonHeaderElements.push_back("ordinalNumber");
 	commonHeaderElements.push_back("address");
 	if (fileinfo.getFileFormatEnum() == Format::PE)
 		commonHeaderElements.push_back("delayed");
-}
-
-/**
- * Destructor
- */
-ImportTableJsonGetter::~ImportTableJsonGetter()
-{
-
 }
 
 std::size_t ImportTableJsonGetter::getBasicInfo(std::size_t structIndex, std::vector<std::string> &desc, std::vector<std::string> &info) const
@@ -56,10 +50,12 @@ std::size_t ImportTableJsonGetter::getBasicInfo(std::size_t structIndex, std::ve
 	desc.push_back("crc32");
 	desc.push_back("md5");
 	desc.push_back("sha256");
-	info.push_back(numToStr(fileinfo.getNumberOfStoredImports()));
+	desc.push_back("tlsh");
+	info.push_back(std::to_string(fileinfo.getNumberOfStoredImports()));
 	info.push_back(fileinfo.getImphashCrc32());
 	info.push_back(fileinfo.getImphashMd5());
 	info.push_back(fileinfo.getImphashSha256());
+	info.push_back(fileinfo.getImphashTlsh());
 
 	return info.size();
 }
@@ -72,8 +68,9 @@ bool ImportTableJsonGetter::getRecord(std::size_t structIndex, std::size_t recIn
 	}
 
 	record.clear();
-	record.push_back(numToStr(recIndex));
+	record.push_back(std::to_string(recIndex));
 	record.push_back(replaceNonprintableChars(fileinfo.getImportName(recIndex)));
+	record.push_back(replaceNonprintableChars(fileinfo.getImportUsageType(recIndex)));
 	record.push_back(replaceNonprintableChars(fileinfo.getImportLibraryName(recIndex)));
 	record.push_back(fileinfo.getImportOrdinalNumberStr(recIndex, std::dec));
 	record.push_back(fileinfo.getImportAddressStr(recIndex, hexWithPrefix));
@@ -97,3 +94,4 @@ bool ImportTableJsonGetter::getFlags(std::size_t structIndex, std::size_t recInd
 }
 
 } // namespace fileinfo
+} // namespace retdec

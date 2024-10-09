@@ -4,8 +4,6 @@
  * @copyright (c) 2017 Avast Software, licensed under the MIT license
  */
 
-#include <iostream>
-
 #include "retdec/bin2llvmir/utils/llvm.h"
 #include "retdec/bin2llvmir/optimizations/class_hierarchy/hierarchy_analysis.h"
 #include "retdec/bin2llvmir/utils/debug.h"
@@ -21,7 +19,7 @@ namespace bin2llvmir {
 char ClassHierarchyAnalysis::ID = 0;
 
 static RegisterPass<ClassHierarchyAnalysis> RegisterPass(
-		"class-hierarchy",
+		"retdec-class-hierarchy",
 		"C++ class hierarchy optimization",
 		false, // Only looks at CFG
 		false // Analysis Pass
@@ -52,7 +50,7 @@ bool ClassHierarchyAnalysis::runOnModule(Module& M)
 
 IrModifier irModif(&M, config);
 
-std::vector<const rtti_finder::Vtable*> vtable;
+std::vector<const common::Vtable*> vtable;
 
 for (auto& p : image->getRtti().getVtablesGcc())
 {
@@ -66,12 +64,13 @@ for (auto& p : image->getRtti().getVtablesMsvc())
 for (auto* p : vtable)
 {
 	auto& vt = *p;
-	for (auto& item : vt.virtualFncAddresses)
+	for (auto& item : vt.items)
 	{
-		auto *fnc = config->getLlvmFunction(item.address);
+		auto *fnc = config->getLlvmFunction(item.getTargetFunctionAddress());
 		if (fnc == nullptr)
 		{
-			std::string name = names::generateFunctionName(item.address);
+			std::string name = names::generateFunctionName(
+					item.getTargetFunctionAddress());
 
 			auto* ft = FunctionType::get(
 					Type::getInt32Ty(M.getContext()),
@@ -82,7 +81,7 @@ for (auto* p : vtable)
 					name,
 					&M);
 
-			config->insertFunction(fnc, item.address);
+			config->insertFunction(fnc, item.getTargetFunctionAddress());
 		}
 	}
 }
@@ -93,14 +92,14 @@ for (auto* p : vtable)
 {
 	auto& vt = *p;
 
-	std::string varName = names::generateVtableName(vt.vtableAddress);
+	std::string varName = names::generateVtableName(vt.getAddress());
 	std::string typeName = varName + "_type";
 
 	std::vector<Type*> itemTypes;
 	std::vector<Constant*> functionPtrs;
-	for (auto& item : vt.virtualFncAddresses)
+	for (auto& item : vt.items)
 	{
-		auto *fnc = config->getLlvmFunction(item.address);
+		auto *fnc = config->getLlvmFunction(item.getTargetFunctionAddress());
 		assert(fnc);
 		itemTypes.push_back(fnc->getType());
 		functionPtrs.push_back(fnc);
@@ -109,7 +108,7 @@ for (auto* p : vtable)
 	StructType *structType = StructType::create(itemTypes, typeName);
 	Constant *init = ConstantStruct::get(structType, functionPtrs);
 
-	auto* configOld = config->getLlvmGlobalVariable(vt.vtableAddress);
+	auto* configOld = config->getLlvmGlobalVariable(vt.getAddress());
 	if (configOld)
 	{
 		irModif.changeObjectType(
@@ -123,7 +122,7 @@ for (auto* p : vtable)
 	auto* existingLlvm = M.getGlobalVariable(varName);
 	if (existingLlvm)
 	{
-		config->insertGlobalVariable(existingLlvm, vt.vtableAddress);
+		config->insertGlobalVariable(existingLlvm, vt.getAddress());
 		continue;
 	}
 
@@ -132,7 +131,7 @@ for (auto* p : vtable)
 	assert(global != nullptr);
 	global->setInitializer(init);
 
-	config->insertGlobalVariable(global, vt.vtableAddress);
+	config->insertGlobalVariable(global, vt.getAddress());
 }
 
 //=============================================================================
@@ -141,29 +140,26 @@ for (auto* p : vtable)
 {
 	auto& vt = *p;
 
-	retdec::config::Vtable confVt(vt.vtableAddress);
-	confVt.setName(names::generateVtableName(vt.vtableAddress));
+	retdec::common::Vtable confVt(vt.getAddress());
+	confVt.setName(names::generateVtableName(vt.getAddress()));
 
-	retdec::utils::Address itemAddr = vt.vtableAddress;
-	for (auto& item : vt.virtualFncAddresses)
+	for (auto& item : vt.items)
 	{
-		retdec::config::VtableItem confItem(itemAddr);
-		confItem.setTargetFunctionAddress(item.address);
-		if (auto *fnc = config->getLlvmFunction(item.address))
+		retdec::common::VtableItem confItem(item.getAddress());
+		confItem.setTargetFunctionAddress(item.getTargetFunctionAddress());
+		if (auto *fnc = config->getLlvmFunction(item.getTargetFunctionAddress()))
 			confItem.setTargetFunctionName(fnc->getName().str());
 		confVt.items.insert(confItem);
-
-		itemAddr += config->getConfig().architecture.getByteSize();
 	}
 
 	config->getConfig().vtables.insert(confVt);
 
-	auto* global = config->getLlvmGlobalVariable(vt.vtableAddress);
+	auto* global = config->getLlvmGlobalVariable(vt.getAddress());
 	assert(global);
 
-	retdec::config::Object cg(
+	retdec::common::Object cg(
 			global->getName(),
-			retdec::config::Storage::inMemory(vt.vtableAddress)
+			retdec::common::Storage::inMemory(vt.getAddress())
 	);
 	cg.setIsFromDebug(true);
 	config->getConfig().globals.insert(cg);
@@ -271,9 +267,9 @@ void ClassHierarchyAnalysis::processVtablesGcc(
 		assert(fIt != rtti2class.end());
 		auto* c = fIt->second;
 
-		for (auto& vf : gcc->virtualFncAddresses)
+		for (auto& vf : gcc->items)
 		{
-			auto* fnc = config->getLlvmFunction(vf.address);
+			auto* fnc = config->getLlvmFunction(vf.getTargetFunctionAddress());
 			assert(fnc);
 			c->virtualFunctions.insert(fnc);
 
@@ -304,9 +300,9 @@ void ClassHierarchyAnalysis::processVtablesMsvc(
 		assert(fIt != rtti2class.end());
 		auto* c = fIt->second;
 
-		for (auto& vf : msvc->virtualFncAddresses)
+		for (auto& vf : msvc->items)
 		{
-			auto* fnc = config->getLlvmFunction(vf.address);
+			auto* fnc = config->getLlvmFunction(vf.getTargetFunctionAddress());
 			assert(fnc);
 			c->virtualFunctions.insert(fnc);
 

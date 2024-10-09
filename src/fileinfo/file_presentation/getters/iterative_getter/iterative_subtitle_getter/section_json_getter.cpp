@@ -12,6 +12,7 @@
 using namespace retdec::utils;
 using namespace retdec::fileformat;
 
+namespace retdec {
 namespace fileinfo {
 
 /**
@@ -42,17 +43,10 @@ SectionJsonGetter::SectionJsonGetter(FileInformation &fileInfo) : IterativeSubti
 	commonHeaderElements.push_back("numberOfLineNumberEntries");
 	commonHeaderElements.push_back("linkToAnotherSection");
 	commonHeaderElements.push_back("other");
+	commonHeaderElements.push_back("entropy");
 	commonHeaderElements.push_back("crc32");
 	commonHeaderElements.push_back("md5");
 	commonHeaderElements.push_back("sha256");
-}
-
-/**
- * Destructor
- */
-SectionJsonGetter::~SectionJsonGetter()
-{
-
 }
 
 std::size_t SectionJsonGetter::getBasicInfo(std::size_t structIndex, std::vector<std::string> &desc, std::vector<std::string> &info) const
@@ -69,7 +63,7 @@ std::size_t SectionJsonGetter::getBasicInfo(std::size_t structIndex, std::vector
 	desc.push_back("crc32");
 	desc.push_back("md5");
 	desc.push_back("sha256");
-	info.push_back(numToStr(fileinfo.getNumberOfStoredSections()));
+	info.push_back(std::to_string(fileinfo.getNumberOfStoredSections()));
 	info.push_back(fileinfo.getSectionTableCrc32());
 	info.push_back(fileinfo.getSectionTableMd5());
 	info.push_back(fileinfo.getSectionTableSha256());
@@ -102,6 +96,7 @@ bool SectionJsonGetter::getRecord(std::size_t structIndex, std::size_t recIndex,
 	record.push_back(fileinfo.getSectionNumberOfLineNumbersStr(recIndex));
 	record.push_back(fileinfo.getSectionLinkToOtherSectionStr(recIndex));
 	record.push_back(fileinfo.getSectionExtraInfoStr(recIndex));
+	record.push_back(fileinfo.getSectionEntropy(recIndex, truncFloat));
 	record.push_back(fileinfo.getSectionCrc32(recIndex));
 	record.push_back(fileinfo.getSectionMd5(recIndex));
 	record.push_back(fileinfo.getSectionSha256(recIndex));
@@ -124,3 +119,4 @@ bool SectionJsonGetter::getFlags(std::size_t structIndex, std::size_t recIndex, 
 }
 
 } // namespace fileinfo
+} // namespace retdec

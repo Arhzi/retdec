@@ -12,6 +12,7 @@
 using namespace retdec::utils;
 using namespace retdec::fileformat;
 
+namespace retdec {
 namespace fileinfo {
 
 /**
@@ -32,14 +33,6 @@ StringsJsonGetter::StringsJsonGetter(FileInformation &fileInfo) : IterativeSubti
 	commonHeaderElements.push_back("content");
 }
 
-/**
- * Destructor
- */
-StringsJsonGetter::~StringsJsonGetter()
-{
-
-}
-
 std::size_t StringsJsonGetter::getBasicInfo(std::size_t structIndex, std::vector<std::string> &desc, std::vector<std::string> &info) const
 {
 	if(structIndex >= numberOfStructures || !fileinfo.hasStrings())
@@ -51,7 +44,7 @@ std::size_t StringsJsonGetter::getBasicInfo(std::size_t structIndex, std::vector
 	info.clear();
 
 	desc.push_back("numberOfStrings");
-	info.push_back(numToStr(fileinfo.getNumberOfDetectedStrings()));
+	info.push_back(std::to_string(fileinfo.getNumberOfDetectedStrings()));
 
 	return info.size();
 }
@@ -66,7 +59,7 @@ bool StringsJsonGetter::getRecord(std::size_t structIndex, std::size_t recIndex,
 	const auto& strings = fileinfo.getStrings();
 
 	record.clear();
-	record.push_back(numToStr(recIndex));
+	record.push_back(std::to_string(recIndex));
 	record.push_back(strings.getStringFileOffsetStr(recIndex, hexWithPrefix));
 	record.push_back(toLower(strings.getStringTypeStr(recIndex)));
 	record.push_back(replaceNonprintableChars(strings.getStringSectionName(recIndex)));
@@ -89,3 +82,4 @@ bool StringsJsonGetter::getFlags(std::size_t structIndex, std::size_t recIndex, 
 }
 
 } // namespace fileinfo
+} // namespace retdec

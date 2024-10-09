@@ -10,6 +10,7 @@
 using namespace retdec::cpdetect;
 using namespace retdec::fileformat;
 
+namespace retdec {
 namespace fileinfo {
 
 /**
@@ -19,20 +20,15 @@ namespace fileinfo {
  * @param searchPar Parameters for detection of used compiler (or packer)
  * @param loadFlags Load flags
  */
-RawDataDetector::RawDataDetector(std::string pathToInputFile, FileInformation &finfo,
-	retdec::cpdetect::DetectParams &searchPar, retdec::fileformat::LoadFlags loadFlags) :
-	FileDetector(pathToInputFile, finfo, searchPar, loadFlags)
+RawDataDetector::RawDataDetector(
+		std::string pathToInputFile,
+		FileInformation &finfo,
+		retdec::cpdetect::DetectParams &searchPar,
+		retdec::fileformat::LoadFlags loadFlags)
+		: FileDetector(pathToInputFile, finfo, searchPar, loadFlags)
 {
 	fileParser = rawParser = std::make_shared<retdec::fileformat::RawDataFormat>(pathToInputFile, loadFlags);
 	loaded = fileParser->isInValidState();
-}
-
-/**
- * Destructor
- */
-RawDataDetector::~RawDataDetector()
-{
-
 }
 
 /**
@@ -124,7 +120,7 @@ void RawDataDetector::detectFileType()
 
 void RawDataDetector::getAdditionalInfo()
 {
-	unsigned long long ep = 0;
+	std::uint64_t ep = 0;
 	if(fileParser->getEpAddress(ep))
 	{
 		fileInfo.toolInfo.epAddress = ep;
@@ -140,7 +136,8 @@ retdec::cpdetect::CompilerDetector* RawDataDetector::createCompilerDetector() co
 		cpParams.searchType = SearchType::MOST_SIMILAR;
 	}
 
-	return new RawDataCompiler(*rawParser, cpParams, fileInfo.toolInfo);
+	return new CompilerDetector(*rawParser, cpParams, fileInfo.toolInfo);
 }
 
 } // namespace fileinfo
+} // namespace retdec

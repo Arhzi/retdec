@@ -11,7 +11,6 @@
 
 #include <llvm/Object/MachO.h>
 #include <llvm/Object/MachOUniversal.h>
-#include <llvm/Support/MachO.h>
 
 #include "retdec/fileformat/file_format/file_format.h"
 
@@ -106,6 +105,7 @@ class MachOFormat : public FileFormat
 		Architecture getTargetArchitecture(std::uint32_t cpuType) const;
 		std::vector<std::string> getMachOUniversalArchitectures() const;
 		const char* getBufferStart() const;
+		const char* getBufferEnd() const;
 		void clearCommands();
 		/// @}
 	protected:
@@ -113,7 +113,8 @@ class MachOFormat : public FileFormat
 		std::unique_ptr<llvm::object::MachOUniversalBinary> fatFile; ///< parser of universal binary
 	public:
 		MachOFormat(std::string pathToFile, LoadFlags loadFlags = LoadFlags::NONE);
-		virtual ~MachOFormat() override;
+		MachOFormat(std::istream &inputStream, LoadFlags loadFlags = LoadFlags::NONE);
+		MachOFormat(const std::uint8_t *data, std::size_t size, LoadFlags loadFlags = LoadFlags::NONE);
 
 		/// @name Byte value storage methods
 		/// @{
@@ -129,11 +130,11 @@ class MachOFormat : public FileFormat
 		virtual bool isObjectFile() const override;
 		virtual bool isDll() const override;
 		virtual bool isExecutable() const override;
-		virtual bool getMachineCode(unsigned long long &result) const override;
-		virtual bool getAbiVersion(unsigned long long &result) const override;
-		virtual bool getImageBaseAddress(unsigned long long &imageBase) const override;
-		virtual bool getEpAddress(unsigned long long &result) const override;
-		virtual bool getEpOffset(unsigned long long &epOffset) const override;
+		virtual bool getMachineCode(std::uint64_t &result) const override;
+		virtual bool getAbiVersion(std::uint64_t &result) const override;
+		virtual bool getImageBaseAddress(std::uint64_t &imageBase) const override;
+		virtual bool getEpAddress(std::uint64_t &result) const override;
+		virtual bool getEpOffset(std::uint64_t &epOffset) const override;
 		virtual Architecture getTargetArchitecture() const override;
 		virtual std::size_t getDeclaredNumberOfSections() const override;
 		virtual std::size_t getDeclaredNumberOfSegments() const override;

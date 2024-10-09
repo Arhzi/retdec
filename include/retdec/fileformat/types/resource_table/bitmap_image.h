@@ -19,14 +19,14 @@ namespace fileformat {
 struct BitmapInformationHeader
 {
 	std::uint32_t size;                      ///< size of header (must be 40)
-	std::int32_t width;                      ///< width (signed)
-	std::int32_t height;                     ///< height (signed)
+	std::uint32_t width;                     ///< width
+	std::uint32_t height;                    ///< height
 	std::uint16_t planes;                    ///< color planes (must be 1)
 	std::uint16_t bitCount;                  ///< bpp color depth
 	std::uint32_t compression;               ///< compression
 	std::uint32_t bitmapSize;                ///< size of bitmap
-	std::int32_t horizontalRes;              ///< horizontal resolution (signed, hint for BMP reader)
-	std::int32_t verticalRes;                ///< vertical resolution (signed, hint for BMP reader)
+	std::uint32_t horizontalRes;             ///< horizontal resolution (hint for BMP reader)
+	std::uint32_t verticalRes;               ///< vertical resolution (hint for BMP reader)
 	std::uint32_t colorsUsed;                ///< number of colors in the image
 	std::uint32_t colorImportant;            ///< minimal number of important colors (generaly ignored)
 
@@ -66,9 +66,6 @@ class BitmapImage
 		std::vector<std::vector<struct BitmapPixel>> image;    ///< bitmap image map row x column
 
 	public:
-		BitmapImage();
-		~BitmapImage();
-
 		/// @name Getters
 		/// @{
 		std::size_t getWidth() const;
@@ -77,13 +74,9 @@ class BitmapImage
 		const std::vector<std::vector<struct BitmapPixel>> &getImage() const;
 		/// @}
 
-		/// @name Setters
-		/// @{
-		// TODO
-		/// @}
-
 		/// @name Other methods
 		/// @{
+		bool parsePngFormat(const ResourceIcon &icon);
 		bool parseDibFormat(const ResourceIcon &icon);
 		bool parseDibHeader(const ResourceIcon &icon, struct BitmapInformationHeader &res) const;
 		bool parseDib1Data(const ResourceIcon &icon, const struct BitmapInformationHeader &hdr);
@@ -108,4 +101,3 @@ class BitmapImage
 } // namespace retdec
 
 #endif
-	

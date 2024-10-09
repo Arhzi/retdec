@@ -13,6 +13,7 @@
 using namespace retdec::utils;
 using namespace retdec::fileformat;
 
+namespace retdec {
 namespace fileinfo {
 
 /**
@@ -41,14 +42,6 @@ ResourceJsonGetter::ResourceJsonGetter(FileInformation &fileInfo) : IterativeSub
 	commonHeaderElements.push_back("sha256");
 }
 
-/**
- * Destructor
- */
-ResourceJsonGetter::~ResourceJsonGetter()
-{
-
-}
-
 std::size_t ResourceJsonGetter::getBasicInfo(std::size_t structIndex, std::vector<std::string> &desc, std::vector<std::string> &info) const
 {
 	if(structIndex >= numberOfStructures || !fileinfo.getNumberOfStoredResources())
@@ -64,7 +57,7 @@ std::size_t ResourceJsonGetter::getBasicInfo(std::size_t structIndex, std::vecto
 	desc.push_back("iconMd5");
 	desc.push_back("iconSha256");
 	desc.push_back("iconAvgHash");
-	info.push_back(numToStr(fileinfo.getNumberOfStoredResources()));
+	info.push_back(std::to_string(fileinfo.getNumberOfStoredResources()));
 	info.push_back(fileinfo.getResourceIconhashCrc32());
 	info.push_back(fileinfo.getResourceIconhashMd5());
 	info.push_back(fileinfo.getResourceIconhashSha256());
@@ -81,7 +74,7 @@ bool ResourceJsonGetter::getRecord(std::size_t structIndex, std::size_t recIndex
 	}
 
 	record.clear();
-	record.push_back(numToStr(recIndex));
+	record.push_back(std::to_string(recIndex));
 	auto name = fileinfo.getResourceName(recIndex);
 	shrinkAndReplaceNonprintable(name, MAX_NAME_LENGTH);
 	const auto nameId = fileinfo.getResourceNameIdStr(recIndex, std::dec);
@@ -132,3 +125,4 @@ bool ResourceJsonGetter::getFlags(std::size_t structIndex, std::size_t recIndex,
 }
 
 } // namespace fileinfo
+} // namespace retdec

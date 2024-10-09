@@ -7,11 +7,10 @@
 #include "retdec/fileformat/types/resource_table/resource_icon.h"
 #include "retdec/fileformat/types/resource_table/resource_icon_group.h"
 
-
 namespace {
 
 // Icon priority list
-constexpr std::pair<unsigned short, uint16_t> iconPriorities[] =
+constexpr std::pair<uint16_t, uint16_t> iconPriorities[] =
 {
 	{32, 32},
 	{24, 32},
@@ -40,27 +39,31 @@ constexpr std::pair<unsigned short, uint16_t> iconPriorities[] =
 bool iconCompare(const retdec::fileformat::ResourceIcon *i1, const retdec::fileformat::ResourceIcon *i2)
 {
 	auto i1Width = i1->getWidth();
+	auto i1Height = i1->getHeight();
 	auto i1BitCount = i1->getBitCount();
 	auto i2Width = i2->getWidth();
 	auto i2Height = i2->getHeight();
 	auto i2BitCount = i2->getBitCount();
 
-	if(i2Width != i2Height)
-	{
+	// Priority 1: icon with the same dimensions over icons
+	if((i1Width == i1Height) && (i2Width != i2Height))
 		return false;
-	}
+	if((i1Width != i1Height) && (i2Width == i2Height))
+		return true;
 
 	for(const auto &p : iconPriorities)
 	{
+		// Priority 2: Icons where both size and bit count match
 		if(p.first == i1Width && p.second == i1BitCount)
-		{
 			return false;
-		}
-
 		if(p.first == i2Width && p.second == i2BitCount)
-		{
 			return true;
-		}
+
+		// Priority 3: Icons where size matches
+		if(p.first == i1Width)
+			return false;
+		if(p.first == i2Width)
+			return true;
 	}
 
 	return false;
@@ -70,22 +73,6 @@ bool iconCompare(const retdec::fileformat::ResourceIcon *i1, const retdec::filef
 
 namespace retdec {
 namespace fileformat {
-
-/**
- * Constructor
- */
-ResourceIconGroup::ResourceIconGroup() : iconGroupID(0)
-{
-
-}
-
-/**
- * Destructor
- */
-ResourceIconGroup::~ResourceIconGroup()
-{
-
-}
 
 /**
  * Get entry offset
@@ -149,7 +136,7 @@ std::size_t ResourceIconGroup::getIconGroupID() const
 /**
  * Get number of entries
  * @param nEntries Destination for result to be stored
- * @return @c true if get was successfull, otherwise false
+ * @return @c true if get was successful, otherwise false
 */
 bool ResourceIconGroup::getNumberOfEntries(std::size_t &nEntries) const
 {
@@ -169,7 +156,7 @@ bool ResourceIconGroup::getNumberOfEntries(std::size_t &nEntries) const
  * Get entry name ID
  * @param eIndex Index of selected entry (indexed from 0)
  * @param nameID Destination for result to be stored
- * @return @c true if get was successfull, otherwise false
+ * @return @c true if get was successful, otherwise false
 */
 bool ResourceIconGroup::getEntryNameID(std::size_t eIndex, std::size_t &nameID) const
 {
@@ -189,7 +176,7 @@ bool ResourceIconGroup::getEntryNameID(std::size_t eIndex, std::size_t &nameID) 
  * Get entry width
  * @param eIndex Index of selected entry (indexed from 0)
  * @param width Destination for result to be stored
- * @return @c true if get was successfull, otherwise false
+ * @return @c true if get was successful, otherwise false
 */
 bool ResourceIconGroup::getEntryWidth(std::size_t eIndex, std::uint16_t &width) const
 {
@@ -200,8 +187,8 @@ bool ResourceIconGroup::getEntryWidth(std::size_t eIndex, std::uint16_t &width) 
 		return false;
 	}
 
-	width = bytes[0];
-
+	if((width = bytes[0]) == 0)
+		width = 256;	// https://devblogs.microsoft.com/oldnewthing/20101018-00/?p=12513
 	return true;
 }
 
@@ -209,7 +196,7 @@ bool ResourceIconGroup::getEntryWidth(std::size_t eIndex, std::uint16_t &width) 
  * Get entry height
  * @param eIndex Index of selected entry (indexed from 0)
  * @param height Destination for result to be stored
- * @return @c true if get was successfull, otherwise false
+ * @return @c true if get was successful, otherwise false
 */
 bool ResourceIconGroup::getEntryHeight(std::size_t eIndex, std::uint16_t &height) const
 {
@@ -220,8 +207,8 @@ bool ResourceIconGroup::getEntryHeight(std::size_t eIndex, std::uint16_t &height
 		return false;
 	}
 
-	height = bytes[0];
-
+	if((height = bytes[0]) == 0)
+		height = 256;	// https://devblogs.microsoft.com/oldnewthing/20101018-00/?p=12513
 	return true;
 }
 
@@ -229,7 +216,7 @@ bool ResourceIconGroup::getEntryHeight(std::size_t eIndex, std::uint16_t &height
  * Get entry icon size
  * @param eIndex Index of selected entry (indexed from 0)
  * @param iconSize Destination for result to be stored
- * @return @c true if get was successfull, otherwise false
+ * @return @c true if get was successful, otherwise false
 */
 bool ResourceIconGroup::getEntryIconSize(std::size_t eIndex, std::size_t &iconSize) const
 {
@@ -249,7 +236,7 @@ bool ResourceIconGroup::getEntryIconSize(std::size_t eIndex, std::size_t &iconSi
  * Get entry color count
  * @param eIndex Index of selected entry (indexed from 0)
  * @param colorCount Destination for result to be stored
- * @return @c true if get was successfull, otherwise false
+ * @return @c true if get was successful, otherwise false
 */
 bool ResourceIconGroup::getEntryColorCount(std::size_t eIndex, std::uint8_t &colorCount) const
 {
@@ -269,7 +256,7 @@ bool ResourceIconGroup::getEntryColorCount(std::size_t eIndex, std::uint8_t &col
  * Get entry planes
  * @param eIndex Index of selected entry (indexed from 0)
  * @param planes Destination for result to be stored
- * @return @c true if get was successfull, otherwise false
+ * @return @c true if get was successful, otherwise false
 */
 bool ResourceIconGroup::getEntryPlanes(std::size_t eIndex, std::uint16_t &planes) const
 {
@@ -289,7 +276,7 @@ bool ResourceIconGroup::getEntryPlanes(std::size_t eIndex, std::uint16_t &planes
  * Get entry bit count
  * @param eIndex Index of selected entry (indexed from 0)
  * @param bitCount Destination for result to be stored
- * @return @c true if get was successfull, otherwise false
+ * @return @c true if get was successful, otherwise false
 */
 bool ResourceIconGroup::getEntryBitCount(std::size_t eIndex, std::uint16_t &bitCount) const
 {
@@ -324,7 +311,7 @@ bool ResourceIconGroup::hasIcons() const
 }
 
 /**
- * Add an icon to the icon group 
+ * Add an icon to the icon group
  */
 void ResourceIconGroup::addIcon(ResourceIcon *icon)
 {

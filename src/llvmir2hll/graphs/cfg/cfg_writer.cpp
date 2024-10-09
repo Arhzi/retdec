@@ -8,8 +8,6 @@
 #include "retdec/llvmir2hll/support/debug.h"
 #include "retdec/utils/conversion.h"
 
-using retdec::utils::toString;
-
 namespace retdec {
 namespace llvmir2hll {
 
@@ -21,11 +19,6 @@ namespace llvmir2hll {
 */
 CFGWriter::CFGWriter(ShPtr<CFG> cfg, std::ostream &out):
 	cfg(cfg), out(out) {}
-
-/**
-* @brief Destructs the writer.
-*/
-CFGWriter::~CFGWriter() {}
 
 } // namespace llvmir2hll
 } // namespace retdec

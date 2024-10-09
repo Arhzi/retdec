@@ -4,11 +4,11 @@
 
 from __future__ import print_function
 
+import importlib
 import os
 import re
 import sys
 
-import importlib
 utils = importlib.import_module('retdec-utils')
 utils.check_python_version()
 utils.ensure_script_is_being_run_from_installed_retdec()
@@ -32,13 +32,13 @@ except ImportError:
     print("warning: module 'colorama' (https://pypi.python.org/pypi/colorama)",
           "not found, running without color support", file=sys.stderr)
 
-import importlib
-config = importlib.import_module('retdec-config')
 utils = importlib.import_module('retdec-utils')
 
 CmdRunner = utils.CmdRunner
 sys.stdout = utils.Unbuffered(sys.stdout)
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+UNIT_TESTS_DIR = SCRIPT_DIR
 
 def print_colored(message, color=None):
     """Emits a colored version of the given message to the standard output (without
@@ -105,9 +105,9 @@ def run_unit_tests_in_dir(path, verbose=False):
     for unit_test in unit_tests_in_dir(path):
         print()
         unit_test_name = os.path.basename(unit_test)
-        print_colored(unit_test_name, colorama.Fore.YELLOW+colorama.Style.BRIGHT)
+        print_colored(unit_test_name, colorama.Fore.YELLOW + colorama.Style.BRIGHT)
 
-        output, return_code, _ = CmdRunner().run_cmd([unit_test, '--gtest_color=yes'], buffer_output=True)
+        output, return_code, _ = CmdRunner.run_cmd([unit_test, '--gtest_color=yes'], buffer_output=True)
         print_output(output, verbose)
 
         if return_code != 0:
@@ -124,11 +124,11 @@ def run_unit_tests_in_dir(path, verbose=False):
 def main():
     verbose = len(sys.argv) > 1 and sys.argv[1] in ['-v', '--verbose']
 
-    if not os.path.isdir(config.UNIT_TESTS_DIR):
-        utils.print_error_and_die('error: no unit tests found in %s' % config.UNIT_TESTS_DIR)
+    if not os.path.isdir(UNIT_TESTS_DIR):
+        utils.print_error_and_die('error: no unit tests found in %s' % UNIT_TESTS_DIR)
 
-    print('Running all unit tests in %s...' % config.UNIT_TESTS_DIR)
-    sys.exit(run_unit_tests_in_dir(config.UNIT_TESTS_DIR, verbose))
+    print('Running all unit tests in %s...' % UNIT_TESTS_DIR)
+    sys.exit(run_unit_tests_in_dir(UNIT_TESTS_DIR, verbose))
 
 
 if __name__ == "__main__":

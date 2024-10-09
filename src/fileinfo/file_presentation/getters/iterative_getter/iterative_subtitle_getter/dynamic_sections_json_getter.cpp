@@ -12,6 +12,7 @@
 using namespace retdec::utils;
 using namespace retdec::fileformat;
 
+namespace retdec {
 namespace fileinfo {
 
 /**
@@ -35,14 +36,6 @@ DynamicSectionsJsonGetter::DynamicSectionsJsonGetter(FileInformation &fileInfo) 
 	commonHeaderElements.push_back("type");
 	commonHeaderElements.push_back("value");
 	commonHeaderElements.push_back("description");
-}
-
-/**
- * Destructor
- */
-DynamicSectionsJsonGetter::~DynamicSectionsJsonGetter()
-{
-
 }
 
 std::size_t DynamicSectionsJsonGetter::getBasicInfo(std::size_t structIndex, std::vector<std::string> &desc, std::vector<std::string> &info) const
@@ -71,7 +64,7 @@ bool DynamicSectionsJsonGetter::getRecord(std::size_t structIndex, std::size_t r
 	}
 
 	record.clear();
-	record.push_back(numToStr(recIndex));
+	record.push_back(std::to_string(recIndex));
 	record.push_back(toLower(fileinfo.getDynamicEntryType(structIndex, recIndex)));
 	record.push_back(fileinfo.getDynamicEntryValueStr(structIndex, recIndex, hexWithPrefix));
 	record.push_back(fileinfo.getDynamicEntryDescription(structIndex, recIndex));
@@ -94,3 +87,4 @@ bool DynamicSectionsJsonGetter::getFlags(std::size_t structIndex, std::size_t re
 }
 
 } // namespace fileinfo
+} // namespace retdec

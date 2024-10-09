@@ -7,6 +7,7 @@
 #include "retdec/bin2llvmir/providers/names.h"
 #include "retdec/utils/string.h"
 
+using namespace retdec::common;
 using namespace retdec::utils;
 
 namespace retdec {
@@ -20,24 +21,36 @@ namespace bin2llvmir {
 
 namespace names {
 
-std::string generateFunctionName(utils::Address a, bool ida)
+std::string generateFunctionName(common::Address a, bool ida)
 {
 	return ida
 			? generatedFunctionPrefixIDA + a.toHexString()
 			: generatedFunctionPrefix + a.toHexString();
 }
 
-std::string generateFunctionNameUnknown(utils::Address a, bool)
+std::string generateFunctionNameUnknown(common::Address a, bool)
 {
 	return generatedFunctionPrefixUnk + a.toHexString();
 }
 
-std::string generateBasicBlockName(utils::Address a)
+std::string generateGlobalVarName(common::Address a, const std::string& name)
+{
+	return (name.empty() ? generatedGlobalVarPrefix : (name + "_"))
+			+ a.toHexString();
+}
+
+std::string generateStackVarName(int offset, const std::string& name)
+{
+	return (name.empty() ? generatedStackVarPrefix : (name + "_"))
+			+ std::to_string(offset);
+}
+
+std::string generateBasicBlockName(common::Address a)
 {
 	return generatedBasicBlockPrefix + a.toHexString();
 }
 
-std::string generateTempVariableName(utils::Address a, unsigned cntr)
+std::string generateTempVariableName(common::Address a, unsigned cntr)
 {
 	return generatedTempVarPrefix + std::to_string(cntr) + "_" + a.toHexString();
 }
@@ -47,7 +60,7 @@ std::string generateFunctionNameUndef(unsigned cntr)
 	return generatedUndefFunctionPrefix + std::to_string(cntr);
 }
 
-std::string generateVtableName(utils::Address a)
+std::string generateVtableName(common::Address a)
 {
 	return generatedVtablePrefix + a.toHexString();
 }
@@ -74,7 +87,12 @@ Name::Name(Config* c, const std::string& name, eType type, Lti* lti) :
 		fixPic32Mangling();
 	}
 
-	_inLti = lti->getLtiFunction(_name) != nullptr;
+	fixPostfix();
+
+	if (lti && _type > eType::LTI_FUNCTION && lti->getLtiFunction(_name))
+	{
+		_type = eType::LTI_FUNCTION;
+	}
 }
 
 Name::operator std::string() const
@@ -91,33 +109,17 @@ bool Name::operator<(const Name& o) const
 {
 	if (_type == o._type)
 	{
-		// Can this even happen? Maybe it should not.
-		//
-		if (_name.empty())
-		{
-			return false;
-		}
-		else if (o._name.empty())
-		{
-			return true;
-		}
-		else if (_inLti)
-		{
-			return true;
-		}
-		else if (o._inLti)
-		{
-			return false;
-		}
 		// E.g. real case symbol table:
 		// 0x407748 @ .text
 		// 0x407748 @ _printf
 		//
-		else if (_name.front() == '.')
+		if (!_name.empty() && _name.front() == '.'
+				&& !o._name.empty() && o._name.front() != '.')
 		{
 			return false;
 		}
-		else if (o._name.front() == '.')
+		else if (!_name.empty() && _name.front() != '.'
+				&& !o._name.empty() && o._name.front() == '.')
 		{
 			return true;
 		}
@@ -182,6 +184,24 @@ void Name::fixPic32Mangling()
 	}
 }
 
+/**
+ * Remove name's postfix.
+ * TODO: This was done in fileformat, but was removed from there.
+ * Maybe we should do it only for some types of names (e.g. symbols).
+ * Probably we should not take care only of GLIBC, there might be more std
+ * postfixes (e.g. GLIBCXX), or any other postfixes (e.g. NSS).
+ * Maybe we should keep the postfix somewhere and let the user know this fix
+ * happened (e.g. add comment to name).
+ */
+void Name::fixPostfix()
+{
+	const auto pos = _name.find("@@GLIBC_");
+	if(pos && pos != std::string::npos)
+	{
+		_name.erase(pos);
+	}
+}
+
 //
 //==============================================================================
 // Names
@@ -242,18 +262,16 @@ bool Names::empty() const
 //
 
 NameContainer::NameContainer(
-		llvm::Module* m,
+		llvm::Module*,
 		Config* c,
 		DebugFormat* d,
 		FileImage* i,
-		demangler::CDemangler* dm,
+		Demangler*,
 		Lti* lti)
 		:
-		_module(m),
 		_config(c),
 		_debug(d),
 		_image(i),
-		_demangler(dm),
 		_lti(lti)
 {
 	initFromConfig();
@@ -266,7 +284,7 @@ NameContainer::NameContainer(
  * \return \c True if name added, \c false otherwise.
  */
 bool NameContainer::addNameForAddress(
-		retdec::utils::Address a,
+		retdec::common::Address a,
 		const std::string& name,
 		Name::eType type,
 		Lti* lti)
@@ -280,12 +298,12 @@ bool NameContainer::addNameForAddress(
 	return ns.addName(_config, name, type, lti ? lti : _lti);
 }
 
-const Names& NameContainer::getNamesForAddress(retdec::utils::Address a)
+const Names& NameContainer::getNamesForAddress(retdec::common::Address a)
 {
 	return _data[a];
 }
 
-const Name& NameContainer::getPreferredNameForAddress(retdec::utils::Address a)
+const Name& NameContainer::getPreferredNameForAddress(retdec::common::Address a)
 {
 	return _data[a].getPreferredName();
 }
@@ -293,32 +311,24 @@ const Name& NameContainer::getPreferredNameForAddress(retdec::utils::Address a)
 void NameContainer::initFromConfig()
 {
 	addNameForAddress(
-			_config->getConfig().getEntryPoint(),
+			_config->getConfig().parameters.getEntryPoint(),
 			names::entryPointName,
 			Name::eType::ENTRY_POINT);
 
-	for (auto& p : _config->getConfig().functions)
+	for (auto& f : _config->getConfig().functions)
 	{
 		addNameForAddress(
-				p.second.getStart(),
-				p.second.getName(),
+				f.getStart(),
+				f.getName(),
 				Name::eType::CONFIG_FUNCTION);
 	}
 
-	for (auto& p : _config->getConfig().globals)
+	for (auto& g : _config->getConfig().globals)
 	{
 		addNameForAddress(
-				p.second.getStorage().getAddress(),
-				p.second.getName(),
+				g.getStorage().getAddress(),
+				g.getName(),
 				Name::eType::CONFIG_GLOBAL);
-	}
-
-	for (auto& s : _config->getConfig().segments)
-	{
-		addNameForAddress(
-				s.getStart(),
-				s.getName(),
-				Name::eType::CONFIG_SEGMENT);
 	}
 }
 
@@ -337,14 +347,14 @@ void NameContainer::initFromDebug()
 				Name::eType::DEBUG_FUNCTION);
 	}
 
-	for (const auto& p : _debug->globals)
+	for (const auto& g : _debug->globals)
 	{
 		Address addr;
-		if (p.second.getStorage().isMemory(addr))
+		if (g.getStorage().isMemory(addr))
 		{
 			addNameForAddress(
 					addr,
-					p.second.getName(),
+					g.getName(),
 					Name::eType::DEBUG_GLOBAL);
 		}
 	}
@@ -357,7 +367,7 @@ void NameContainer::initFromImage()
 	{
 		Address addr = imp->getAddress();
 		std::string name = imp->getName();
-		unsigned long long ord = 0;
+		std::uint64_t ord = 0;
 		bool ordOk = false;
 
 		if (name.empty())
@@ -391,24 +401,24 @@ void NameContainer::initFromImage()
 		}
 	}
 
-	if (auto *exTbl = _image->getFileFormat()->getExportTable())
-	for (const auto &exp : *exTbl)
-	{
-		addNameForAddress(
-				exp.getAddress(),
-				exp.getName(),
-				Name::eType::EXPORT);
-	}
+	if (auto* exTbl = _image->getFileFormat()->getExportTable())
+		for (const auto& exp : *exTbl)
+		{
+			addNameForAddress(
+					exp.getAddress(),
+					exp.getName(),
+					Name::eType::EXPORT);
+		}
 
 	for (const auto* t : _image->getFileFormat()->getSymbolTables())
-	for (const auto& s : *t)
-	{
-		unsigned long long a = 0;
-		if (s->getRealAddress(a))
+		for (const auto& s : *t)
 		{
-			Name::eType t = Name::eType::SYMBOL_OTHER;
-			switch (s->getUsageType())
+			unsigned long long a = 0;
+			if (s->getRealAddress(a))
 			{
+				Name::eType t = Name::eType::SYMBOL_OTHER;
+				switch (s->getUsageType())
+				{
 				case retdec::fileformat::Symbol::UsageType::FUNCTION:
 					t = Name::eType::SYMBOL_FUNCTION;
 					break;
@@ -421,23 +431,23 @@ void NameContainer::initFromImage()
 				default:
 					t = Name::eType::SYMBOL_OTHER;
 					break;
-			}
+				}
 
-			if (_config->getConfig().architecture.isArmOrThumb() && a % 2)
-			{
-				a -= 1;
-			}
+				if (_config->getConfig().architecture.isArm32OrThumb() && a % 2)
+				{
+					a -= 1;
+				}
 
-			addNameForAddress(a, s->getName(), t);
+				addNameForAddress(a, s->getName(), t);
+			}
 		}
-	}
 
 	if (_image->getFileFormat())
 	{
-		unsigned long long ep = 0;
+		std::uint64_t ep = 0;
 		if (_image->getFileFormat()->getEpAddress(ep))
 		{
-			if (_config->getConfig().architecture.isArmOrThumb() && ep % 2)
+			if (_config->getConfig().architecture.isArm32OrThumb() && ep % 2)
 			{
 				ep -= 1;
 			}
@@ -493,8 +503,13 @@ std::string NameContainer::getNameFromImportLibAndOrd(
 
 bool NameContainer::loadImportOrds(const std::string& libName)
 {
+	std::string arch;
+	if (_config->getConfig().architecture.isArm()) arch = "arm";
+	else if (_config->getConfig().architecture.isX86()) arch = "x86";
+	else return false;
+
 	auto dir = _config->getConfig().parameters.getOrdinalNumbersDirectory();
-	auto filePath = dir + "/" + libName + ".ord";
+	auto filePath = dir + "/" + arch + "/" + libName + ".ord";
 
 	std::ifstream inputFile;
 	inputFile.open(filePath);
@@ -536,7 +551,7 @@ NameContainer* NamesProvider::addNames(
 		Config* c,
 		DebugFormat* d,
 		FileImage* i,
-		demangler::CDemangler* dm,
+		Demangler* dm,
 		Lti* lti)
 {
 	// Debug info may not be present -> \p d can be nullptr.

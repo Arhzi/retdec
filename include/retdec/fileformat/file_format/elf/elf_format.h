@@ -13,9 +13,16 @@
 
 #include "retdec/fileformat/file_format/file_format.h"
 #include "retdec/fileformat/types/note_section/elf_notes.h"
+#include "retdec/fileformat/types/import_table/elf_import_table.h"
 
 namespace retdec {
 namespace fileformat {
+
+enum ElfLoaderError : std::uint32_t
+{
+	LDR_ERROR_NONE = 0,
+	LDR_ERROR_SEGMENT_OUT_OF_FILE
+};
 
 /**
  * ElfFormat - wrapper for parsing ELF files
@@ -23,18 +30,26 @@ namespace fileformat {
 class ElfFormat : public FileFormat
 {
 	private:
+		std::vector<std::string> telfhashSymbols;
+		/// flag if we already loaded symbols from SHT_DYNSYM
+		bool telfhashDynsym = false;
+		std::string telfhash;
+
 		/**
 		 * Description of ELF relocation table
 		 */
 		struct RelocationTableInfo
 		{
-			unsigned long long address;   ///< start address of relocation table
-			unsigned long long size;      ///< size of table
-			unsigned long long entrySize; ///< size of one entry in table
-			unsigned long long type;      ///< type of relocations (SHT_REL or SHT_RELA)
-
-			RelocationTableInfo();
-			~RelocationTableInfo();
+			/// start address of relocation table
+			unsigned long long address = 0;
+			/// size of table
+			unsigned long long size = 0;
+			/// size of one entry in table
+			unsigned long long entrySize = 0;
+			/// type of relocations (SHT_REL or SHT_RELA)
+			unsigned long long type = SHT_NULL;
+			/// associated with Procedure Linkage Table.
+			bool plt = false;
 		};
 
 		/// @name Initialization methods
@@ -54,6 +69,7 @@ class ElfFormat : public FileFormat
 		ELFIO::section* addRelocationTable(ELFIO::section *dynamicSection, const RelocationTableInfo &info, ELFIO::section *symbolTable);
 		ELFIO::section* addRelRelocationTable(ELFIO::section *dynamicSection, const DynamicTable &table, ELFIO::section *symbolTable);
 		ELFIO::section* addRelaRelocationTable(ELFIO::section *dynamicSection, const DynamicTable &table, ELFIO::section *symbolTable);
+		ELFIO::section* addPltRelocationTable(ELFIO::section *dynamicSection, const DynamicTable &table, ELFIO::section *symbolTable);
 		ELFIO::section* addGlobalOffsetTable(ELFIO::section *dynamicSection, const DynamicTable &table);
 		ELFIO::Elf_Half fixSymbolLink(ELFIO::Elf_Half symbolLink, ELFIO::Elf64_Addr symbolValue);
 		bool getRelocationMask(unsigned relType, std::vector<std::uint8_t> &mask);
@@ -61,10 +77,14 @@ class ElfFormat : public FileFormat
 		void loadSymbols(const ELFIO::elfio *file, const ELFIO::symbol_section_accessor *elfSymbolTable, const ELFIO::section *elfSection);
 		void loadSymbols(const SymbolTable &oldTab, const DynamicTable &dynTab, ELFIO::section &got);
 		void loadDynamicTable(DynamicTable &table, const ELFIO::dynamic_section_accessor *elfDynamicTable);
-		void loadDynamicTable(const ELFIO::dynamic_section_accessor *elfDynamicTable);
+		DynamicTable* loadDynamicTable(
+				const ELFIO::dynamic_section_accessor *elfDynamicTable,
+				const ELFIO::section *sec);
 		void loadSections();
+		void checkSegmentLoadable(const ELFIO::segment* seg);
 		void loadSegments();
-		void loadInfoFromDynamicTables(std::size_t noOfTables);
+		void loadDynamicSegmentSection();
+		void loadInfoFromDynamicTables(DynamicTable &dynTab, ELFIO::section *sec);
 		void loadInfoFromDynamicSegment();
 		void loadNoteSecSeg(ElfNoteSecSeg &noteSecSegs) const;
 		void loadNotes();
@@ -73,15 +93,21 @@ class ElfFormat : public FileFormat
 		void loadCorePrPsInfo(std::size_t offset, std::size_t size);
 		void loadCoreAuxvInfo(std::size_t offset, std::size_t size);
 		void loadCoreInfo();
+		void loadTelfhash();
 		/// @}
 	protected:
 		int elfClass;        ///< class of input ELF file
 		ELFIO::elfio reader; ///< parser of input ELF file
 		ELFIO::elfio writer; ///< parser of auxiliary ELF object which is needed for fixing representation of input file
+
+		/// Offsets of already read symbol tables.
+		std::set<ELFIO::Elf64_Off> symtabOffsets;
+		/// Addresses of already read symbol tables.
+		std::set<ELFIO::Elf64_Addr> symtabAddresses;
 	public:
 		ElfFormat(std::string pathToFile, LoadFlags loadFlags = LoadFlags::NONE);
 		ElfFormat(std::istream &inputStream, LoadFlags loadFlags = LoadFlags::NONE);
-		virtual ~ElfFormat() override;
+		ElfFormat(const std::uint8_t *data, std::size_t size, LoadFlags loadFlags = LoadFlags::NONE);
 
 		/// @name Byte value storage methods
 		/// @{
@@ -97,11 +123,11 @@ class ElfFormat : public FileFormat
 		virtual bool isObjectFile() const override;
 		virtual bool isDll() const override;
 		virtual bool isExecutable() const override;
-		virtual bool getMachineCode(unsigned long long &result) const override;
-		virtual bool getAbiVersion(unsigned long long &result) const override;
-		virtual bool getImageBaseAddress(unsigned long long &imageBase) const override;
-		virtual bool getEpAddress(unsigned long long &result) const override;
-		virtual bool getEpOffset(unsigned long long &epOffset) const override;
+		virtual bool getMachineCode(std::uint64_t &result) const override;
+		virtual bool getAbiVersion(std::uint64_t &result) const override;
+		virtual bool getImageBaseAddress(std::uint64_t &imageBase) const override;
+		virtual bool getEpAddress(std::uint64_t &result) const override;
+		virtual bool getEpOffset(std::uint64_t &epOffset) const override;
 		virtual Architecture getTargetArchitecture() const override;
 		virtual std::size_t getDeclaredNumberOfSections() const override;
 		virtual std::size_t getDeclaredNumberOfSegments() const override;
@@ -122,6 +148,7 @@ class ElfFormat : public FileFormat
 		std::size_t getOsOrAbiVersion() const;
 		std::size_t getSectionTableSize() const;
 		std::size_t getSegmentTableSize() const;
+		const std::string& getTelfhash() const;
 		int getElfClass() const;
 		bool isWiiPowerPc() const;
 		/// @}

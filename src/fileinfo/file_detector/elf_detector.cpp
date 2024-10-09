@@ -6,6 +6,7 @@
 
 #include "retdec/utils/array.h"
 #include "retdec/utils/conversion.h"
+#include "retdec/utils/string.h"
 #include "retdec/fileformat/types/symbol_table/elf_symbol.h"
 #include "retdec/fileformat/utils/other.h"
 #include "fileinfo/file_detector/elf_detector.h"
@@ -15,6 +16,7 @@ using namespace ELFIO;
 using namespace retdec::cpdetect;
 using namespace retdec::fileformat;
 
+namespace retdec {
 namespace fileinfo {
 
 namespace
@@ -546,7 +548,7 @@ std::string getSymbolLinkToSection(unsigned long long link)
 		case SHN_XINDEX:
 			return "XINDEX";
 		default:
-			return numToStr(link);
+			return std::to_string(link);
 	}
 }
 
@@ -770,19 +772,15 @@ std::string getNoteDescription(
  * @param searchPar Parameters for detection of used compiler (or packer)
  * @param loadFlags Load flags
  */
-ElfDetector::ElfDetector(std::string pathToInputFile, FileInformation &finfo, retdec::cpdetect::DetectParams &searchPar, retdec::fileformat::LoadFlags loadFlags) :
-	FileDetector(pathToInputFile, finfo, searchPar, loadFlags)
+ElfDetector::ElfDetector(
+		std::string pathToInputFile,
+		FileInformation &finfo,
+		retdec::cpdetect::DetectParams &searchPar,
+		retdec::fileformat::LoadFlags loadFlags)
+		: FileDetector(pathToInputFile, finfo, searchPar, loadFlags)
 {
 	fileParser = elfParser = std::make_shared<ElfWrapper>(fileInfo.getPathToFile(), loadFlags);
 	loaded = elfParser->isInValidState();
-}
-
-/**
- * Destructor
- */
-ElfDetector::~ElfDetector()
-{
-
 }
 
 /**
@@ -790,7 +788,7 @@ ElfDetector::~ElfDetector()
  */
 void ElfDetector::getFileVersion()
 {
-	fileInfo.setFileVersion(numToStr(elfParser->getFileVersion()));
+	fileInfo.setFileVersion(std::to_string(elfParser->getFileVersion()));
 }
 
 /**
@@ -798,7 +796,7 @@ void ElfDetector::getFileVersion()
  */
 void ElfDetector::getFileHeaderInfo()
 {
-	fileInfo.setFileHeaderVersion(numToStr(elfParser->getFileHeaderVersion()));
+	fileInfo.setFileHeaderVersion(std::to_string(elfParser->getFileHeaderVersion()));
 	fileInfo.setFileHeaderSize(elfParser->getFileHeaderSize());
 }
 
@@ -872,7 +870,7 @@ void ElfDetector::getSegments()
 void ElfDetector::getSymbolTable()
 {
 	// specific analysis for ARM architecture
-	unsigned long long machineType;
+	std::uint64_t machineType;
 	const bool isArm = elfParser->getMachineCode(machineType) && machineType == EM_ARM;
 	SpecialInformation specInfo("instruction set", "iset");
 
@@ -1000,58 +998,52 @@ void ElfDetector::getRelocationTable(const ELFIO::section *sec)
 	delete relocations;
 }
 
-/**
- * Get information about dynamic section
- * @param sec File section
- */
-void ElfDetector::getDynamicSection(const ELFIO::section *sec)
+void ElfDetector::getDynamicSectionsSegments()
 {
-	const dynamic_section_accessor *dynamic = elfParser->getDynamicSection(sec->get_index());
-	if(!dynamic)
-	{
-		return;
-	}
-	DynamicSection dynamicSection;
-	DynamicEntry dynamicEntry;
-	std::string str;
-	Elf_Xword tag = 0, dynValue = 0;
-
-	dynamicSection.setNumberOfDeclaredEntries(dynamic->get_entries_num());
 	const unsigned long long flagMasks[] = {DF_ORIGIN, DF_SYMBOLIC, DF_TEXTREL, DF_BIND_NOW, DF_STATIC_TLS};
 	const unsigned long long flagsSize = arraySize(flagMasks);
 	const std::string flagsDesc[flagsSize] = {"DF_ORIGIN", "DF_SYMBOLIC", "DF_TEXTREL", "DF_BIND_NOW",
 												"file contains code using a static thread-local storage scheme (DF_STATIC_TLS)"};
 	const std::string flagsAbbv[flagsSize] = {"o", "s", "r", "b", "t"};
 
-	for(unsigned long long i = 0, e = dynamic->get_loaded_entries_num(); i < e; ++i)
+	for (auto* dt : elfParser->getDynamicTables())
 	{
-		dynamic->get_entry(i, tag, dynValue, str);
-		dynamicEntry.setValue(dynValue);
-		dynamicEntry.setDescription(replaceNonprintableChars(str));
-		dynamicEntry.setType(getDynamicEntryType(tag));
-		dynamicEntry.clearFlagsDescriptors();
-		if(tag == DT_FLAGS)
+		DynamicSection dynamicSection;
+
+		dynamicSection.setNumberOfDeclaredEntries(dt->getNumberOfRecords());
+		dynamicSection.setSectionName(dt->getSectionName());
+
+		for (auto& de : *dt)
 		{
-			dynamicEntry.setFlagsSize(ELF_64_FLAGS_SIZE);
-			dynamicEntry.setFlags(dynValue);
-			for(unsigned long long j = 0; j < flagsSize; ++j)
+			DynamicEntry dynamicEntry;
+
+			dynamicEntry.setValue(de.getValue());
+			dynamicEntry.setDescription(replaceNonprintableChars(de.getDescription()));
+			dynamicEntry.setType(getDynamicEntryType(de.getType()));
+			dynamicEntry.clearFlagsDescriptors();
+			if(de.getType() == DT_FLAGS)
 			{
-				if(dynValue & flagMasks[j])
+				dynamicEntry.setFlagsSize(ELF_64_FLAGS_SIZE);
+				dynamicEntry.setFlags(de.getValue());
+				for(unsigned long long j = 0; j < flagsSize; ++j)
 				{
-					dynamicEntry.addFlagsDescriptor(flagsDesc[j], flagsAbbv[j]);
+					if(de.getValue() & flagMasks[j])
+					{
+						dynamicEntry.addFlagsDescriptor(flagsDesc[j], flagsAbbv[j]);
+					}
 				}
 			}
+			else
+			{
+				dynamicEntry.setFlagsSize(0);
+				dynamicEntry.setFlags(0);
+			}
+
+			dynamicSection.addEntry(dynamicEntry);
 		}
-		else
-		{
-			dynamicEntry.setFlagsSize(0);
-			dynamicEntry.setFlags(0);
-		}
-		dynamicSection.addEntry(dynamicEntry);
+
+		fileInfo.addDynamicSection(dynamicSection);
 	}
-	dynamicSection.setSectionName(sec->get_name());
-	fileInfo.addDynamicSection(dynamicSection);
-	delete dynamic;
 }
 
 /**
@@ -1113,6 +1105,11 @@ void ElfDetector::getSections()
 			fs.setCrc32(auxSec->getCrc32());
 			fs.setMd5(auxSec->getMd5());
 			fs.setSha256(auxSec->getSha256());
+			double entropy;
+			if(auxSec->getEntropy(entropy))
+			{
+				fs.setEntropy(entropy);
+			}
 		}
 		fileInfo.addSection(fs);
 		switch(sec->get_type())
@@ -1124,9 +1121,6 @@ void ElfDetector::getSections()
 			case SHT_RELA:
 			case SHT_REL:
 				getRelocationTable(sec);
-				break;
-			case SHT_DYNAMIC:
-				getDynamicSection(sec);
 				break;
 			default:
 				break;
@@ -1205,7 +1199,7 @@ void ElfDetector::getCoreInfo()
 		auto name = mapGetValueOrDefault(auxVecMap, entry.first, "");
 		if(name.empty())
 		{
-			name = "UNKNOWN " + toString(entry.first);
+			name = "UNKNOWN " + std::to_string(entry.first);
 		}
 		fileInfo.addAuxVectorEntry(name, entry.second);
 	}
@@ -1291,7 +1285,7 @@ void ElfDetector::getOsAbiInfo()
 		abi = "Architecture-specific ABI extension";
 	}
 	fileInfo.setOsAbi(abi);
-	fileInfo.setOsAbiVersion(numToStr(abiVersion));
+	fileInfo.setOsAbiVersion(std::to_string(abiVersion));
 }
 
 /**
@@ -1359,7 +1353,7 @@ void ElfDetector::getOsAbiInfoNote()
 				if(elfParser->get4ByteOffset(notes[0].dataOffset, result))
 				{
 					fileInfo.setOsAbi("Android");
-					fileInfo.setOsAbiVersion(numToStr(result));
+					fileInfo.setOsAbiVersion(std::to_string(result));
 					return;
 				}
 			}
@@ -1383,7 +1377,7 @@ void ElfDetector::detectFileClass()
 
 void ElfDetector::detectArchitecture()
 {
-	unsigned long long machineType = 0;
+	std::uint64_t machineType = 0;
 	if(!elfParser->getMachineCode(machineType))
 	{
 		return;
@@ -1955,6 +1949,10 @@ void ElfDetector::detectFileType()
 	fileInfo.setFileType(fileType);
 }
 
+void ElfDetector::getTelfhash() {
+	fileInfo.setTelfhash(elfParser->getTelfhash());
+}
+
 void ElfDetector::getAdditionalInfo()
 {
 	getFileVersion();
@@ -1964,9 +1962,11 @@ void ElfDetector::getAdditionalInfo()
 	getFlags();
 	getSegments();
 	getSections();
+	getDynamicSectionsSegments();
 	getSymbolTable();
 	getNotes();
 	getCoreInfo();
+	getTelfhash();
 }
 
 /**
@@ -1975,7 +1975,8 @@ void ElfDetector::getAdditionalInfo()
  */
 retdec::cpdetect::CompilerDetector* ElfDetector::createCompilerDetector() const
 {
-	return new ElfCompiler(*elfParser, cpParams, fileInfo.toolInfo);
+	return new CompilerDetector(*elfParser, cpParams, fileInfo.toolInfo);
 }
 
 } // namespace fileinfo
+} // namespace retdec

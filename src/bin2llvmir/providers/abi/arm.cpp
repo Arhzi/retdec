@@ -28,14 +28,11 @@ AbiArm::AbiArm(llvm::Module* m, Config* c) :
 			ARM_REG_R3,
 			ARM_REG_R4,
 			ARM_REG_R5};
+
+	_defcc = CallingConvention::ID::CC_ARM;
 }
 
-AbiArm::~AbiArm()
-{
-
-}
-
-bool AbiArm::isGeneralPurposeRegister(const llvm::Value* val)
+bool AbiArm::isGeneralPurposeRegister(const llvm::Value* val) const
 {
 	uint32_t rid = getRegisterId(val);
 	return ARM_REG_R0 <= rid && rid <= ARM_REG_R12;
@@ -43,12 +40,19 @@ bool AbiArm::isGeneralPurposeRegister(const llvm::Value* val)
 
 bool AbiArm::isNopInstruction(cs_insn* insn)
 {
+	cs_arm& insnArm = insn->detail->arm;
+
 	// True NOP variants.
 	//
 	if (insn->id == ARM_INS_NOP)
 	{
 		return true;
 	}
+	else if (insn->id == ARM_INS_HINT && insnArm.op_count == 0)
+	{
+		return true;
+	}
+
 
 	return false;
 }

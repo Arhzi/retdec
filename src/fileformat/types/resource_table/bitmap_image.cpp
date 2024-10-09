@@ -8,28 +8,14 @@
 
 #include "retdec/fileformat/types/resource_table/bitmap_image.h"
 #include "retdec/utils/conversion.h"
+#include "retdec/utils/scope_exit.h"
 #include "retdec/utils/system.h"
+#include <stb/stb_image.h>
 
 using namespace retdec::utils;
 
 namespace retdec {
 namespace fileformat {
-
-/**
- * Constructor
- */
-BitmapImage::BitmapImage()
-{
-
-}
-
-/**
- * Destructor
- */
-BitmapImage::~BitmapImage()
-{
-
-}
 
 /**
  * Get image width
@@ -61,6 +47,32 @@ std::size_t BitmapImage::getHeight() const
 const std::vector<std::vector<struct BitmapPixel>> &BitmapImage::getImage() const
 {
 	return image;
+}
+
+bool BitmapImage::parsePngFormat(const ResourceIcon &icon)
+{
+	int x, y, n;
+	auto byte_span = icon.getBytes();
+	unsigned char* data = stbi_load_from_memory(byte_span.bytes_begin(), byte_span.size(), &x, &y, &n, 4);
+	if (!data) return false;
+
+	SCOPE_EXIT {
+		stbi_image_free(data);
+	};
+
+	// Flip it height wise, as existing DIB format has height flipped compared to PNG
+	for (int i = y - 1; i >= 0; --i)
+	{
+		std::vector<BitmapPixel> row;
+		for (int j = 0; j < x; j++)
+		{
+			int offset = (i * x + j) * 4;
+			row.emplace_back(data[offset], data[offset + 1], data[offset + 2], data[offset + 3]);
+		}
+		this->image.push_back(row);
+	}
+
+	return true;
 }
 
 /**
@@ -120,14 +132,14 @@ bool BitmapImage::parseDibHeader(const ResourceIcon &icon, struct BitmapInformat
 
 	std::size_t offset = 0;
 	res.size = *reinterpret_cast<uint32_t *>(&bytes.data()[offset]); offset += sizeof(res.size);
-	res.width = *reinterpret_cast<int32_t *>(&bytes.data()[offset]); offset += sizeof(res.width);
-	res.height = *reinterpret_cast<int32_t *>(&bytes.data()[offset]); offset += sizeof(res.height);
+	res.width = *reinterpret_cast<uint32_t *>(&bytes.data()[offset]); offset += sizeof(res.width);
+	res.height = *reinterpret_cast<uint32_t *>(&bytes.data()[offset]); offset += sizeof(res.height);
 	res.planes = *reinterpret_cast<uint16_t *>(&bytes.data()[offset]); offset += sizeof(res.planes);
 	res.bitCount = *reinterpret_cast<uint16_t *>(&bytes.data()[offset]); offset += sizeof(res.bitCount);
 	res.compression = *reinterpret_cast<uint32_t *>(&bytes.data()[offset]); offset += sizeof(res.compression);
 	res.bitmapSize = *reinterpret_cast<uint32_t *>(&bytes.data()[offset]); offset += sizeof(res.bitmapSize);
-	res.horizontalRes = *reinterpret_cast<int32_t *>(&bytes.data()[offset]); offset += sizeof(res.horizontalRes);
-	res.verticalRes = *reinterpret_cast<int32_t *>(&bytes.data()[offset]); offset += sizeof(res.verticalRes);
+	res.horizontalRes = *reinterpret_cast<uint32_t *>(&bytes.data()[offset]); offset += sizeof(res.horizontalRes);
+	res.verticalRes = *reinterpret_cast<uint32_t *>(&bytes.data()[offset]); offset += sizeof(res.verticalRes);
 	res.colorsUsed = *reinterpret_cast<uint32_t *>(&bytes.data()[offset]); offset += sizeof(res.colorsUsed);
 	res.colorImportant = *reinterpret_cast<uint32_t *>(&bytes.data()[offset]); offset += sizeof(res.colorImportant);
 
@@ -147,7 +159,8 @@ bool BitmapImage::parseDibHeader(const ResourceIcon &icon, struct BitmapInformat
 	}
 
 	if (res.size != res.headerSize() || res.planes != 1 || res.compression != 0 ||
-		res.width * 2 != res.height || res.width > 512 || res.bitCount > 32)
+		res.width * 2 != res.height || res.width > 512 || res.height > 1024 ||
+		res.bitCount > 32)
 	{
 		return false;
 	}
@@ -209,6 +222,11 @@ bool BitmapImage::parseDib1Data(const ResourceIcon &icon, const struct BitmapInf
 		{
 			for (std::size_t i = 0; i < 8; i++)
 			{
+				if (bytes.size() <= offset)
+				{
+					return false;
+				}
+
 				auto bit = (bytes[offset] & (0x01 << (7 - i)));
 				auto index = (bit == 0) ? 0 : 1;
 				row.push_back(palette[index]);
@@ -223,10 +241,15 @@ bool BitmapImage::parseDib1Data(const ResourceIcon &icon, const struct BitmapInf
 		{
 			for (std::size_t i = 0; i < rest; i++)
 			{
+				if (bytes.size() <= offset)
+				{
+					return false;
+				}
+
 				auto index = !!(bytes[offset] & (0x01 << (7 - i)));
 				row.push_back(palette[index]);
 			}
-			
+
 			offset++;
 		}
 
@@ -289,6 +312,11 @@ bool BitmapImage::parseDib4Data(const ResourceIcon &icon, const struct BitmapInf
 
 		for (std::size_t j = 0; j < nColumns / 2; j++)
 		{
+			if (bytes.size() <= offset)
+			{
+				return false;
+			}
+
 			row.push_back(palette[bytes[offset] >> 4]);
 			row.push_back(palette[bytes[offset] & 0x0F]);
 			offset++;
@@ -296,6 +324,11 @@ bool BitmapImage::parseDib4Data(const ResourceIcon &icon, const struct BitmapInf
 
 		if (nColumns % 2)
 		{
+			if (bytes.size() <= offset)
+			{
+				return false;
+			}
+
 			row.push_back(palette[bytes[offset] >> 4]);
 			offset++;
 		}
@@ -360,6 +393,11 @@ bool BitmapImage::parseDib8Data(const ResourceIcon &icon, const struct BitmapInf
 
 		for (std::size_t j = 0; j < nColumns; j++)
 		{
+			if (bytes.size() <= offset)
+			{
+				return false;
+			}
+
 			row.push_back(palette[bytes[offset]]);
 			offset += bytesPP;
 		}
@@ -409,6 +447,11 @@ bool BitmapImage::parseDib24Data(const ResourceIcon &icon, const struct BitmapIn
 
 		for (std::size_t j = 0; j < nColumns; j++)
 		{
+			if (bytes.size() <= (offset+2))
+			{
+				return false;
+			}
+
 			row.emplace_back(bytes[offset + 2], bytes[offset + 1], bytes[offset], 0xFF);
 			offset += bytesPP;
 		}
@@ -457,6 +500,11 @@ bool BitmapImage::parseDib32Data(const ResourceIcon &icon, const struct BitmapIn
 
 		for (std::size_t j = 0; j < nColumns; j++)
 		{
+			if (bytes.size() <= (offset+3))
+			{
+				return false;
+			}
+
 			row.emplace_back(bytes[offset + 2], bytes[offset + 1], bytes[offset], bytes[offset + 3]);
 			offset += bytesPP;
 		}
@@ -488,6 +536,11 @@ bool BitmapImage::parseDibPalette(const ResourceIcon &icon, std::vector<struct B
 
 	for (std::uint32_t i = 0; i < nBytes; i += 4)
 	{
+		if (bytes.size() <= (i+3))
+		{
+			return false;
+		}
+
 		palette.emplace_back(bytes[i + 2], bytes[i + 1], bytes[i], bytes[i + 3]);
 	}
 
@@ -607,7 +660,6 @@ bool BitmapImage::reduce8x8()
 		}
 	}
 
-
 	/* crop to 8x8 */
 	image.resize(8);
 	for (auto &row : image)
@@ -710,7 +762,6 @@ void BitmapImage::greyScale()
 		}
 	}
 }
-
 
 } // namespace fileformat
 } // namespace retdec
